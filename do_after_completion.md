@@ -1,50 +1,59 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 15 COMPLETION CHECKLIST
-# Implement the Typed Streaming Layer
+# STEP 17 COMPLETION CHECKLIST
+# Build the Interface Layer & Generative UI Components
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Verify event types and StreamHandler import cleanly:
+[ ] Run the frontend typecheck to ensure zero TypeScript errors:
     ```powershell
-    uv run python -c "from src.ui import StreamHandler, format_sse_event, parse_sse_line, STAGE_LABELS; print('Stream layer loaded:', len(STAGE_LABELS), 'stages mapped')"
+    cd A:\Projects\clipcrop\frontend; pnpm exec tsc --noEmit
     ```
-    Expected: Stream layer loaded: 8 stages mapped
+    Expected: Clean exit with zero errors.
 
-[ ] Run the streaming layer unit test suite:
+[ ] Run the frontend verification script to check all components and UI Non-Goals:
     ```powershell
-    uv run pytest tests/unit/test_streaming_layer.py -v
+    cd A:\Projects\clipcrop\frontend; node test_verification.mjs
     ```
-    Expected: 6 passed
+    Expected: "ALL STEP 17 VERIFICATION CHECKS PASSED SUCCESSFULLY!"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Run the full test regression suite:
+[ ] Run the production build to ensure Vite bundler succeeds:
     ```powershell
-    uv run pytest tests/ -v
+    cd A:\Projects\clipcrop\frontend; pnpm run build
     ```
-    Expected: 71 passed in ~64 seconds with 0 failures
-    If wrong: Inspect test failures and verify model cache / ffmpeg on PATH
+    Expected: `dist/index.html` and assets built in <3 seconds without errors.
 
-[ ] Verify live SSE stream emission against the simple case video:
+[ ] Run the full backend regression test suite to ensure zero regressions:
     ```powershell
-    uv run python -c "from src.ui.event_types import *; import asyncio; from httpx import ASGITransport, AsyncClient; from src.main import app; async def test(): transport = ASGITransport(app=app); ac = AsyncClient(transport=transport, base_url='http://test'); res = await ac.post('/runs', files={'file': ('simple.mp4', open('tests/fixtures/simple_case.mp4', 'rb'), 'video/mp4')}); run_id = res.json()['run_id']; async with ac.stream('GET', f'/runs/{run_id}/stream') as s: async for l in s.aiter_lines(): p = parse_sse_line(l); (p and print(p.type, getattr(p, 'stage', ''), getattr(p, 'reason', ''))); (p and p.type == 'data-run-end' and break); await ac.aclose(); asyncio.run(test())"
+    cd A:\Projects\clipcrop; uv run pytest tests/ -v
     ```
-    Expected: Displays stream events from `data-stage-start` through `data-run-end success`
+    Expected: 71 passed with 0 failures.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/ui/event_types.py` — Strict Pydantic V2 models for all 7 SSE wire event types (`data-stage-start`, `data-stage-progress`, `tool-input-available`, `tool-output-available`, `data-state-update`, `error`, `data-run-end`), canonical `STAGE_LABELS`, and wire format serializers (`format_sse_event`, `parse_sse_line`)
-[ ] File: `src/ui/stream_handler.py` — Asynchronous multi-subscriber event broadcaster (`StreamHandler`), tool execution wrapper (`ToolTracker`), and periodic heartbeat context manager (`track_progress`)
-[ ] File: `tests/unit/test_streaming_layer.py` — 6 unit and integration tests verifying schema validation, pub/sub broadcasting, historical replay, and full SSE stream reception
-[ ] File: `src/ui/__init__.py` — Exported all public models, serializers, and StreamHandler
-[ ] Feature: Live Stage Transitions — Emits `data-stage-start` at the beginning of each of the 8 pipeline stages
-[ ] Feature: Tool Lifecycle Observability — Emits `tool-input-available` and `tool-output-available` around every local tool invocation
-[ ] Feature: State Mutation Streaming — Emits `data-state-update` with declared reducer semantics (`immutable-after-init`, `append-only`, `merge-by-key`, `last-write-wins`) on every state write
-[ ] Feature: Late-Joining Replay — Replays all past events from memory buffer to clients connecting after run start
+[ ] File: `frontend/src/types/events.ts` — Full TypeScript definitions for all 7 SSE wire events, 12 domain models, and client state.
+[ ] File: `frontend/src/sse/usePipelineStream.ts` — React hook for chunked SSE stream consumption and reducer state updates.
+[ ] File: `frontend/src/sse/mockEvents.ts` — Section 9.1 mock event sequence for instant offline verification.
+[ ] File: `frontend/src/components/SourceVideoCard.tsx` — Validated media track metadata card (Tool 1).
+[ ] File: `frontend/src/components/TranscriptView.tsx` — Timestamp-linked speech transcript list with drawer (Tool 2).
+[ ] File: `frontend/src/components/VadTimeline.tsx` — Horizontal speech/pause timeline bar (Tool 3).
+[ ] File: `frontend/src/components/CandidateRankingTable.tsx` — Ranked candidate table with 4-factor score breakdown.
+[ ] File: `frontend/src/components/ConfidenceBadge.tsx` — Binary render/skip cutoff badge with hover tooltip.
+[ ] File: `frontend/src/components/CropPathChart.tsx` — 2D camera motion path trajectory chart (Tool 5).
+[ ] File: `frontend/src/components/ClipResultsGrid.tsx` — 9:16 HTML5 video player, format downloads (.mp4, .edl, .xml, .json), and feedback controls (Tools 6 & 7).
+[ ] File: `frontend/src/components/StageTimeline.tsx` — Vertical 8-stage progress timeline with expandable tool drawers.
+[ ] File: `frontend/src/components/SystemMessageBanner.tsx` — Error notification banner for permanent failures.
+[ ] File: `frontend/src/components/UploadZone.tsx` — Drag-and-drop video upload and runtime parameter sliders.
+[ ] File: `frontend/src/App.tsx` — Single-page application integrating all generative UI components.
+[ ] File: `frontend/src/index.css` — Modern design system tokens, typography, dark mode, and micro-animations.
+[ ] File: `frontend/index.html` — Semantic HTML entry point with Google Fonts and meta tags.
+[ ] File: `frontend/vite.config.ts` — Vite configuration with backend proxy to `http://127.0.0.1:8000`.
+[ ] File: `frontend/tsconfig.json` — Strict TypeScript compiler configuration.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -52,39 +61,53 @@
 
 Test 1 — Files Exist:
 ```powershell
-Get-ChildItem -Path src\ui\event_types.py, src\ui\stream_handler.py, tests\unit\test_streaming_layer.py | Select-Object Name, Length
+dir A:\Projects\clipcrop\frontend\src\components\*.tsx
 ```
-✅ Expected: All three files exist with non-zero byte length
-❌ If missing: Ensure files were created properly in `src/ui/` and `tests/unit/`
+✅ Expected:
+  CandidateRankingTable.tsx
+  ClipResultsGrid.tsx
+  ConfidenceBadge.tsx
+  CropPathChart.tsx
+  SourceVideoCard.tsx
+  StageTimeline.tsx
+  SystemMessageBanner.tsx
+  TranscriptView.tsx
+  UploadZone.tsx
+  VadTimeline.tsx
+❌ If missing: Check `frontend/src/components` and regenerate missing components.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import pydantic, httpx; print('Pydantic:', pydantic.__version__, 'HTTPX:', httpx.__version__)"
+cd A:\Projects\clipcrop\frontend; pnpm list
 ```
-✅ Expected: Pydantic 2.x and HTTPX versions printed
-❌ If errors: Run `uv sync`
+✅ Expected: ai@6.0.277, react@19.2.8, react-dom@19.2.8, vite@6.4.3, tailwindcss@4.3.3, typescript@5.9.3
+❌ If errors: Run `pnpm install` in `A:\Projects\clipcrop\frontend`.
 
-Test 3 — Streaming Layer Unit Tests:
+Test 3 — Server or Process Start:
 ```powershell
-uv run pytest tests/unit/test_streaming_layer.py -v
+cd A:\Projects\clipcrop\frontend; pnpm run build
 ```
-✅ Expected: 6 passed (test_event_types_validation_and_serialization, test_stream_handler_broadcast_and_history_replay, test_stream_handler_tool_tracker, test_stream_handler_track_progress_heartbeat, test_streaming_layer_simple_case_receives_all_spec_events_in_order, test_streaming_layer_zero_candidates_emits_error_and_run_end)
-❌ If errors: Inspect pytest error tracebacks
+✅ Expected: `dist/index.html` produced cleanly in ~2 seconds.
+❌ If errors: Run `pnpm exec tsc --noEmit` to inspect TypeScript compiler errors.
 
-Test 4 — Full Regression Suite:
+Test 4 — Functional Check:
 ```powershell
-uv run pytest tests/ -v
+cd A:\Projects\clipcrop\frontend; node test_verification.mjs
 ```
-✅ Expected: All 71 tests pass in ~64s with 0 failures
-❌ If wrong: Check individual failing test modules
+✅ Expected:
+  All files verified.
+  All UI Non-Goals verified: Zero chat threads, thinking tokens, HITL approval modals, or clip retry buttons.
+  Mock events contain all required Vercel AI SDK v6 wire format event types.
+  All Section 4a Generative Components verified.
+❌ If wrong: Review error output and inspect the failing component file.
 
 Test 5 — Security Check:
-[ ] Verify .env is in .gitignore
+[ ] Verify .env is in .gitignore:
     ```powershell
-    Get-Content .gitignore | Select-String "\.env"
+    Get-Content A:\Projects\clipcrop\.gitignore | Select-String "^\.env"
     ```
-    ✅ Expected: .env appears in the output
-    ❌ If missing: Add `.env` to .gitignore immediately
+    ✅ Expected: `.env` appears in the output
+    ❌ If missing: Add `.env` to `.gitignore` immediately
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 GIT COMMIT
@@ -93,11 +116,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 15: Implement the Typed Streaming Layer -- SSE event types, StreamHandler broadcaster, and integration tests"
+git commit -m "Step 17: Build the Interface Layer & Generative UI Components"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 17 until:
+✋ DO NOT proceed to Step 18 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

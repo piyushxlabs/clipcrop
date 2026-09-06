@@ -75,6 +75,22 @@
   - Tool execution context manager (`ToolTracker`) and periodic progress heartbeat context manager (`track_progress`)
   - Pipeline controller integration emitting stage start, stage progress, tool input/output, and reducer state update events in real time
   - Typed streaming layer unit and integration test suite (`tests/unit/test_streaming_layer.py`)
-- **Last Completed Step:** Step 15: Implement the Typed Streaming Layer
-- **Pending Next Step:** Step 17: Build the Interface Layer & Generative UI Components (Step 16 Intentionally Absent)
+  - Full TypeScript models (`frontend/src/types/events.ts`) for all 7 SSE wire events, 12 domain models, and client state
+  - Real-time SSE streaming React hook (`frontend/src/sse/usePipelineStream.ts`) with chunk parser and reducer state dispatcher
+  - Section 4a Generative UI component: `SourceVideoCard` for validated media track metadata
+  - Section 4a Generative UI component: `TranscriptView` for timestamp-linked expandable transcript
+  - Section 4a Generative UI component: `VadTimeline` for horizontal speech and pause map
+  - Section 4a Generative UI component: `CandidateRankingTable` with 4-component heuristic score breakdown
+  - Section 4a Generative UI component: `ConfidenceBadge` with binary render/skip cutoff and inspection tooltip
+  - Section 4a Generative UI component: `CropPathChart` with 2D camera motion path trajectory line
+  - Section 4a Generative UI component: `ClipResultsGrid` with 9:16 HTML5 video player, format downloads (.mp4, .edl, .xml, .json), and feedback controls
+  - Pipeline execution observability timeline (`StageTimeline`) with expandable tool drawers
+  - Permanent failure system notification banner (`SystemMessageBanner`)
+  - Drag-and-drop video upload zone with runtime tuning sliders (`UploadZone`)
+  - Main application layout (`App.tsx`) with dark mode, glassmorphism, micro-animations, and offline mock fixture replay
+  - Strict UI Non-Goals adherence (zero chat UI, zero thinking tokens, zero HITL modals, zero clip retry buttons)
+  - Verified production build (`dist/`) and TypeScript typecheck
+- **Last Completed Step:** Step 17: Build the Interface Layer & Generative UI Components
+- **Pending Next Step:** Step 18: Integrate Telemetry & Observability
 - **Known Issues / Blockers:** None
+

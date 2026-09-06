@@ -203,4 +203,27 @@ Step 5 — No deviations from spec.
 - The frontend in Step 17 (`frontend/src/App.tsx` and components) can directly bind to typed SSE events from `GET /runs/{run_id}/stream` using AI SDK v6 or standard EventSource without any custom protocol translation.
 ---
 
+## Step 17 — Generative UI Architecture, Reducer Synchronization, and UI Non-Goals Enforcement
+**Decision:**
+- Implemented frontend data streaming in `frontend/src/sse/usePipelineStream.ts` using `fetch` with `ReadableStream` reader parsing chunked `data: <json>\n\n` blocks directly, updating client state through matching reducer functions (`append-only`, `merge-by-key`, `last-write-wins`, `immutable-after-init`).
+- Built all 7 Generative UI components from `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 4a (`SourceVideoCard`, `TranscriptView`, `VadTimeline`, `CandidateRankingTable`, `ConfidenceBadge`, `CropPathChart`, `ClipResultsGrid`) with strict payload binding directly to tool outputs and state updates.
+- Enforced paired deliverables contract in `ClipResultsGrid`: clips are only rendered in the deliverables grid if both a valid vertical MP4 clip and a corresponding crop-path export file (`.edl`, `.xml`, or `.json`) exist for that `segment_id`.
+- Enforced all Section 10 UI Non-Goals in code and verified via automated scanning:
+  1. No conversational chat thread.
+  2. No native model thinking panels.
+  3. No approval/HITL modal.
+  4. No individual clip regenerate/retry button.
+  5. No continuous quality score meter (confidence gating is presented strictly as a binary threshold cutoff).
+  6. No raw filesystem paths or internal process PIDs displayed.
+- Built an offline mock fixture replayer (`frontend/src/sse/mockEvents.ts`) mirroring `tests/mocks/mock_tool_data.py` allowing instant end-to-end frontend verification without running external video workloads.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 10 Step 17, `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 4a and Section 10, and rules `ui-non-goals-interface-boundaries.md` and `code-level-verification-over-model-discretion.md`.
+- Guarantees complete visual observability of the deterministic pipeline while strictly adhering to non-generative, local-only architectural reality.
+
+**Impact:**
+- In Step 18 (Integrate Telemetry & Observability), telemetry spans and feedback annotations recorded from `ClipResultsGrid`'s rating buttons will bind directly to the local trace logs in `CLIPCROP_TRACE_LOG_DIR`.
+---
+
+
 

@@ -489,6 +489,74 @@
 **Verification Result:**
 - `uv run pytest tests/unit/test_streaming_layer.py -v` passed all 6 tests in 12.92s.
 - `uv run pytest tests/ -v` passed all 71 unit and integration tests across the entire codebase in 64.09s with 0 failures.
+---
+
+## Step 17 — Build the Interface Layer & Generative UI Components
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented full TypeScript type declarations in `frontend/src/types/events.ts` strictly mirroring `src/ui/event_types.py` and `src/state/schema.py`:
+  - Wire event interfaces: `DataStageStartEvent`, `DataStageProgressEvent`, `ToolInputAvailableEvent`, `ToolOutputAvailableEvent`, `DataStateUpdateEvent`, `ErrorEvent`, `DataRunEndEvent`.
+  - Domain state schemas: `FileRef`, `TranscriptSegment`, `SpeechSpan`, `CandidateSegment`, `BoundingBox`, `FramePosition`, `TrackingResult`, `GateDecision`, `CropKeyframe`, `SmoothedPath`, `SkipRecord`, `ErrorRecord`.
+  - Full client state schema `PipelineState` and `StageState`.
+- Implemented `usePipelineStream` custom React hook in `frontend/src/sse/usePipelineStream.ts`:
+  - Connects to `/runs/{run_id}/stream` via streaming fetch with `ReadableStream` reader parsing `data: <json>\n\n`.
+  - Dispatches stage transitions, tool inputs/outputs, and state updates strictly adhering to the 4 reducer types (`append-only`, `merge-by-key`, `last-write-wins`, `immutable-after-init`).
+  - Provides handlers for mid-session emergency cancellation (`cancelRun` -> `POST /runs/{run_id}/cancel`), per-clip feedback submission (`submitFeedback` -> `POST /runs/{run_id}/feedback`), and state reset.
+- Implemented all 7 Generative UI & Rich Tool Output Rendering components in `frontend/src/components/` strictly adhering to `INTERFACE_OBSERVABILITY_SYSTEM.md` Section 4a:
+  - `SourceVideoCard`: Validated media metadata card displaying duration, resolution, frame rate, and video/audio track presence.
+  - `TranscriptView`: Timestamp-linked speech transcript list with line-level time ranges and expandable drawer.
+  - `VadTimeline`: Horizontal timeline bar spanning video duration with colored speech spans and pause gaps.
+  - `CandidateRankingTable`: Tabular ranked list with composite score and expandable 4-factor heuristic breakdown chart.
+  - `ConfidenceBadge`: Binary render/skip badge with hover tooltip showing exact tracking confidence vs. runtime threshold.
+  - `CropPathChart`: 2D SVG path-line visualization showing smoothed camera pan motion keyframes over time.
+  - `ClipResultsGrid`: Paired deliverables grid with embedded 9:16 HTML5 video player, format downloads (.mp4, .edl, .xml, .json), crop path view toggle, and thumbs up/down + note feedback controls.
+- Implemented orchestration and failure components:
+  - `StageTimeline`: Vertical 8-stage progress timeline with live status, duration/heartbeat pulse, expandable tool inputs/outputs drawers, and per-segment sub-rows.
+  - `SystemMessageBanner`: Error banner for permanent failures (`zero_candidates`, `invalid_source`, `time_budget_exhausted`, `stream_interrupted`).
+  - `UploadZone`: Drag-and-drop video upload with extension validation, file metadata preview, and advanced runtime tuning sliders.
+- Implemented main application in `frontend/src/App.tsx` and styling in `frontend/src/index.css`:
+  - Glassmorphic dark-mode interface with vibrant accents and micro-animations.
+  - Full adherence to Section 10 UI Non-Goals: zero chat threads, zero thinking tokens, zero HITL approval modals, zero clip retry buttons, zero continuous score meters, zero raw filesystem paths.
+  - Offline mock fixture loader powered by `frontend/src/sse/mockEvents.ts` for instant verification against Section 9.1 mock dataset.
+- Verified production build and TypeScript typechecking: `pnpm exec tsc --noEmit` and `pnpm run build` succeeded with 0 errors.
+- Verified backend regression suite: all 71 tests passed in 75.78s.
+
+**Files Created:**
+- `frontend/tsconfig.json` — Frontend TypeScript compiler configuration.
+- `frontend/vite.config.ts` — Vite configuration with backend proxy and automatic JSX.
+- `frontend/index.html` — Main HTML document with semantic structure and Google Fonts.
+- `frontend/src/types/events.ts` — TypeScript models for SSE events, domain schemas, and client state.
+- `frontend/src/sse/usePipelineStream.ts` — React hook for SSE stream consumption and reducer state updates.
+- `frontend/src/sse/mockEvents.ts` — Authoritative mock event stream matching Section 9.1 for offline verification.
+- `frontend/src/components/SourceVideoCard.tsx` — Validated source video metadata card.
+- `frontend/src/components/TranscriptView.tsx` — Expandable timestamp-linked speech transcript.
+- `frontend/src/components/VadTimeline.tsx` — Horizontal speech and pause timeline bar.
+- `frontend/src/components/CandidateRankingTable.tsx` — Ranked candidate segments table with score breakdown.
+- `frontend/src/components/ConfidenceBadge.tsx` — Binary render/skip gate decision badge.
+- `frontend/src/components/CropPathChart.tsx` — 2D camera motion path trajectory chart.
+- `frontend/src/components/ClipResultsGrid.tsx` — Paired vertical clips grid with video player and NLE downloads.
+- `frontend/src/components/StageTimeline.tsx` — Vertical 8-stage progress timeline with tool input/output drawers.
+- `frontend/src/components/SystemMessageBanner.tsx` — Permanent failure and system message banner.
+- `frontend/src/components/UploadZone.tsx` — Drag-and-drop video upload and configuration zone.
+- `frontend/src/index.css` — Modern design system styles, dark-mode tokens, and animations.
+- `frontend/src/App.tsx` — Main application component integrating all components.
+- `frontend/src/main.tsx` — Application entry point mounting App to DOM.
+- `frontend/test_verification.mjs` — Automated verification script for Step 17 components and UI non-goals.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 17 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `pnpm exec tsc --noEmit` exited with code 0 (zero type errors).
+- `pnpm run build` completed cleanly in 1.95s generating `dist/index.html` and bundled assets.
+- `node test_verification.mjs` passed all 21 verification checks, confirming all component files exist, UI non-goals are strictly satisfied, and mock stream events parse correctly.
+- Full regression suite `uv run pytest tests/` passed all 71 unit and integration tests in 75.78s with 0 failures.
 - Pass
 ---
+
 
