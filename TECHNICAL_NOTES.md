@@ -43,3 +43,19 @@
 
 Step 3 — No deviations from spec.
 ---
+
+## Step 4 — Directory Scaffold & Structural Absence Enforcement
+**Decision:**
+- Scaffolded backend module directories (`src/agents`, `src/tools/schemas`, `src/state`, `src/telemetry`, `src/ui`), frontend components/sse directories, and test suites (`tests/mocks`, `tests/unit`, `tests/integration`, `tests/fixtures`).
+- Formally enforced documented absences: no `src/memory/`, no `checkpointing.py`, no `src/tools/mcp_clients/`, and no `frontend/src/hitl/`.
+
+**Reason:**
+- Preserves the strict architectural boundaries mandated in `docs/AGENT_MASTER_PLAN.md` Section 2, `docs/AGENT_ORCHESTRATION_BLUEPRINT.md` Sections 5–7, and `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 5.
+- The state machine is explicitly ephemeral and single-shot in-process (no vector database, no long-term memory, no SQLite/PostgreSQL checkpointing, no approval modal).
+
+**Impact:**
+- Future steps can immediately import and author cleanly separated modules without structural refactoring.
+- Eliminates any ambiguity about where components belong.
+
+Step 4 — No deviations from spec.
+---

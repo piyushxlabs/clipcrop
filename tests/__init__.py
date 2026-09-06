@@ -1,0 +1,1 @@
+"""ClipCrop test suite."""

@@ -1,0 +1,1 @@
+"""ClipCrop integration tests."""

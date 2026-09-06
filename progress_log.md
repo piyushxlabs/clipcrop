@@ -108,3 +108,47 @@
 - Verified `CLAUDE.md` exists and content matches Section 3 of `docs/AGENT_MASTER_PLAN.md` exactly (78 lines, 5,426 characters).
 - Pass
 ---
+
+## Step 4 — Scaffold Directory Structure
+**Date:** September 6, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Created full directory hierarchy matching `docs/AGENT_MASTER_PLAN.md` Section 2:
+  - Backend modules: `src/agents/`, `src/tools/schemas/`, `src/state/`, `src/telemetry/`, `src/ui/`.
+  - Frontend SPA modules: `frontend/src/components/`, `frontend/src/sse/`.
+  - Test suites: `tests/mocks/`, `tests/unit/`, `tests/integration/`, `tests/fixtures/`.
+- Placed standard `__init__.py` markers across all backend and test packages (`src`, `agents`, `tools`, `schemas`, `state`, `telemetry`, `ui`, `tests`, `unit`, `integration`).
+- Added placeholder `.gitkeep` markers in empty component and fixture directories.
+- Authored top-level `README.md` documenting architecture, zero-cost CPU stack, and project structure.
+- Formally verified all documented structural absences (`src/memory/`, `checkpointing.py`, `src/tools/mcp_clients/`, and `frontend/src/hitl/`).
+
+**Files Created:**
+- `src/__init__.py` — Package root marker.
+- `src/agents/__init__.py` — Agent controller package marker.
+- `src/tools/__init__.py` — Tool implementation package marker.
+- `src/tools/schemas/__init__.py` — Pydantic tool schemas package marker.
+- `src/state/__init__.py` — State schema and reducers package marker.
+- `src/telemetry/__init__.py` — OpenTelemetry instrumentation package marker.
+- `src/ui/__init__.py` — Streaming events package marker.
+- `tests/__init__.py` — Test suite root marker.
+- `tests/unit/__init__.py` — Unit test package marker.
+- `tests/integration/__init__.py` — Integration test package marker.
+- `frontend/src/components/.gitkeep` — Frontend component directory anchor.
+- `frontend/src/sse/.gitkeep` — Frontend SSE client directory anchor.
+- `tests/mocks/.gitkeep` — Test mocks directory anchor.
+- `tests/fixtures/.gitkeep` — Test fixtures directory anchor.
+- `README.md` — Project overview and architectural specification documentation.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 4 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- Verified all 11 required directories exist on disk.
+- Verified all 5 forbidden/absent paths (`src/memory`, `checkpointing.py`, `src/tools/mcp_clients`, `frontend/src/hitl`, `frontend/hitl`) do not exist.
+- Verified all Python package markers resolve cleanly via `uv run python`.
+- Pass
+---

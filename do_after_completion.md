@@ -1,42 +1,54 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 3 COMPLETION CHECKLIST
-# Generate Coding Assistant Context File
+# STEP 4 COMPLETION CHECKLIST
+# Scaffold Directory Structure
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Verify `CLAUDE.md` exists and contains the required content
+[ ] Verify full scaffolded directory hierarchy exists
     ```powershell
-    Get-Content CLAUDE.md -Head 15
+    Get-ChildItem -Path src, frontend/src, tests
     ```
-    Expected: Header `# ClipCrop — Coding Assistant Context` and Project Overview visible.
+    Expected: `agents`, `tools`, `state`, `telemetry`, `ui`, `components`, `sse`, `mocks`, `unit`, `integration`, `fixtures` listed.
 
-[ ] Confirm character and line counts match spec
+[ ] Confirm documented structural absences are enforced
     ```powershell
-    (Get-Content CLAUDE.md).Count
+    -not (Test-Path src/memory, src/checkpointing.py, src/tools/mcp_clients, frontend/src/hitl)
     ```
-    Expected: 78 lines.
+    Expected: `True`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify all five core sections exist in `CLAUDE.md`
+[ ] Verify package imports across backend hierarchy
     ```powershell
-    Select-String -Path CLAUDE.md -Pattern "^## "
+    uv run python -c "import src.state, src.tools.schemas, src.agents, src.telemetry, src.ui; print('PACKAGE_TREE_IMPORT_OK')"
     ```
-    Expected:
-    - `## Project Overview`
-    - `## Strict Coding Rules`
-    - `## Architecture Boundaries`
-    - `## Strict Anti-Patterns (Never Do This)`
-    - `## Reference Documents`
+    Expected: `PACKAGE_TREE_IMPORT_OK`
+
+[ ] Check root README.md documentation
+    ```powershell
+    Get-Content README.md -Head 10
+    ```
+    Expected: ClipCrop title, description, and key characteristics visible.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `CLAUDE.md` — Authoritative context document establishing constraints, boundaries, and anti-patterns for assistant execution.
-[ ] Feature: Architectural Governance — Rules locked for Python 3.11 LTS, async-first I/O, Pydantic V2 validation, ProcessPoolExecutor tracking, and local-file OTel export.
+[ ] Directory: `src/agents/` — Pipeline controller and segment worker module location.
+[ ] Directory: `src/tools/schemas/` — Tool implementations and Pydantic V2 / JSON Schemas.
+[ ] Directory: `src/state/` — StateSchema and 4 reducer functions.
+[ ] Directory: `src/telemetry/` — Local-file OpenTelemetry tracing and feedback annotations.
+[ ] Directory: `src/ui/` — Streaming domain event types and FastAPI SSE handler.
+[ ] Directory: `frontend/src/components/` — Generative UI components.
+[ ] Directory: `frontend/src/sse/` — Minimal AI SDK v6 SSE client.
+[ ] Directory: `tests/mocks/` — JSON mock tool outputs.
+[ ] Directory: `tests/unit/` — Reducer and schema unit tests.
+[ ] Directory: `tests/integration/` — Full pipeline integration tests.
+[ ] Directory: `tests/fixtures/` — Sample video fixtures.
+[ ] File: `README.md` — Project architecture, offline execution model, and directory overview.
+[ ] Markers: Standard `__init__.py` files across all backend and test packages.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -44,10 +56,10 @@
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path CLAUDE.md
+Test-Path src/agents, src/tools/schemas, src/state, src/telemetry, src/ui, frontend/src/components, frontend/src/sse, tests/mocks, tests/unit, tests/integration, tests/fixtures, README.md
 ```
-✅ Expected: `True`
-❌ If missing: Generate `CLAUDE.md` from `docs/AGENT_MASTER_PLAN.md` Section 3.
+✅ Expected: `True` for all 12 items.
+❌ If missing: Check directory scaffolding commands.
 
 Test 2 — Environment / Dependencies:
 ```powershell
@@ -61,33 +73,22 @@ Test 3 — Server or Process Start:
 uv run python -c "import uvicorn; print('UVICORN_READY')"
 ```
 ✅ Expected: `UVICORN_READY`
-❌ If errors: Check uvicorn in `.venv`.
+❌ If errors: Check uvicorn installation in `.venv`.
 
 Test 4 — Functional Check:
 ```powershell
 uv run python -c "
-with open('CLAUDE.md', 'r', encoding='utf-8') as f:
-    text = f.read()
-required = [
-    'ClipCrop is a local, single-shot, deterministic media pipeline',
-    'strictly >=3.11,<3.12',
-    'ProcessPoolExecutor',
-    'Pydantic V2',
-    'append_only()',
-    'merge_by_key()',
-    'last_write_wins()',
-    'immutable_after_init()',
-    'There is no checkpointing backend',
-    'There is no orchestration framework',
-    'Never call any network endpoint at runtime',
-]
-for r in required:
-    assert r in text, f'Missing rule: {r}'
-print('ALL_CLAUDE_RULES_VERIFIED')
+from pathlib import Path
+for d in ['src/agents', 'src/tools/schemas', 'src/state', 'src/telemetry', 'src/ui']:
+    assert Path(d).is_dir(), f'Missing dir {d}'
+for f in ['src/memory', 'src/checkpointing.py', 'src/tools/mcp_clients', 'frontend/src/hitl']:
+    assert not Path(f).exists(), f'Forbidden path exists: {f}'
+import src.agents, src.tools.schemas, src.state, src.telemetry, src.ui
+print('SCAFFOLD_STRUCTURAL_INTEGRITY_VERIFIED')
 "
 ```
-✅ Expected: `ALL_CLAUDE_RULES_VERIFIED`
-❌ If wrong: Re-copy Section 3 from `docs/AGENT_MASTER_PLAN.md` into `CLAUDE.md`.
+✅ Expected: `SCAFFOLD_STRUCTURAL_INTEGRITY_VERIFIED`
+❌ If wrong: Remove any forbidden components and re-add missing packages.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -104,11 +105,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 3: Generate Coding Assistant Context File — codified boundaries and rules in CLAUDE.md"
+git commit -m "Step 4: Scaffold Directory Structure — established package hierarchy and verified structural absences"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 4 until:
+✋ DO NOT proceed to Step 5 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

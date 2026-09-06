@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 3: Generate Coding Assistant Context File (CLAUDE.md)
+- **Last Completed Step:** Step 4: Scaffold Directory Structure
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -16,5 +16,7 @@
   - Frontend SPA manifest (`frontend/package.json`) and locked dependencies (`frontend/pnpm-lock.yaml`)
   - Vercel AI SDK v6 (`ai ^6.0.0`), React 19, TypeScript, and Vite dependencies
   - Coding Assistant Context document (`CLAUDE.md`) codifying invariants, boundaries, and anti-patterns
-- **Pending Next Step:** Step 4: Scaffold Directory Structure
+  - Full project directory scaffold (`src/agents`, `src/tools/schemas`, `src/state`, `src/telemetry`, `src/ui`, `frontend/src/components`, `frontend/src/sse`, `tests/mocks`, `tests/unit`, `tests/integration`, `tests/fixtures`)
+  - Root project overview and architecture guide (`README.md`)
+- **Pending Next Step:** Step 5: Initialize the Pipeline Controller Module
 - **Known Issues / Blockers:** None
