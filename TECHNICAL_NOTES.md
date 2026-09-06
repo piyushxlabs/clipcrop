@@ -105,5 +105,21 @@ Step 5 — No deviations from spec.
 
 **Impact:**
 - In Step 10 (Register Tools) and Step 11 (Wire the Fixed Stage Sequence), tools and the pipeline controller cannot bypass reducers or corrupt state invariants.
-- Guaranteed paired deliverables and render gating are enforced before tools are called.
+
+---
+## Step 10 — Dual-Format Schema Parity, Biometric Privacy, and Zero-Dependency CMX 3600 Serialization
+**Decision:**
+- Implemented dual-format schemas across all 7 tools and internal helpers: strict Pydantic V2 input/output models (`model_config = ConfigDict(strict=True)`) paired with authoritative MCP JSON Schema dict constants, verified by an automated reflection test enforcing 100% parameter equivalence.
+- MediaPipe BlazeFace speaker tracking (`src/tools/track_speaker_position.py`) extracts strictly 2D bounding boxes (`center_x`, `center_y`, `width`, `height`) and detection confidence. Completely omitted any facial mesh, landmark extraction, voiceprint, or identity profiling to maintain strict biometric privacy compliance.
+- Serialized CMX 3600 Edit Decision Lists (`.edl`) using standard library Python formatting converting keyframe millisecond offsets to SMPTE non-drop timecodes (`HH:MM:SS:FF`) at the source video frame rate, eliminating unapproved third-party EDL dependencies.
+- Enforced sandboxed path resolution across all tools: validating paths resolve strictly within configured roots (`CLIPCROP_UPLOAD_DIR`, `CLIPCROP_OUTPUT_DIR`, `CLIPCROP_MODELS_DIR`), rejecting `..` path traversal, and guaranteeing `output_path != source_video_path`.
+
+**Reason:**
+- Satisfies `AGENT_LOGIC_SPEC.md` Section 3 and `async-io-and-pydantic-validation-mandate.md` requiring strict schema-first tool interfaces compatible with local deterministic pipelines and MCP servers.
+- Satisfies `identity-persona-and-compliance-directives.md` and BIPA/CUBI safe harbor requirements prohibiting biometric identity templates.
+- Guarantees NLE timeline import compatibility (Premiere Pro, DaVinci Resolve, Final Cut Pro) at zero financial cost ($0.00) without brittle external C-libraries.
+- Satisfies security gate 1 & 5 in `scope-screening-and-safety-gate-order.md`.
+
+**Impact:**
+- In Step 11 (Wire the Fixed Stage Sequence), the `PipelineController` can invoke these 7 tools directly with complete type safety, sandboxed path validation, and deterministic output schemas.
 ---

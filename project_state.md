@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 7: Implement Typed State Schema & Reducers
+- **Last Completed Step:** Step 10: Register Tools
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -31,5 +31,17 @@
   - Central state mutation dispatcher (`apply_state_update`)
   - Pipeline precondition verifiers (`verify_render_precondition`, `verify_export_precondition`)
   - Unit test suite verifying reducer invariants and state protections (`tests/unit/test_reducers.py`)
-- **Pending Next Step:** Step 10: Register Tools (Steps 8 & 9 are intentionally absent per spec)
+  - Dual-format Pydantic V2 and strict MCP JSON schemas for all 7 tools (`src/tools/schemas/`)
+  - Tool 1 implementation: `decode_and_validate_source` (async ffprobe media validation)
+  - Tool 2 implementation: `transcribe_audio` (in-process Faster-Whisper with retry fallback)
+  - Tool 3 implementation: `detect_speech_pauses` (local Silero VAD speech span detection)
+  - Internal scoring: `candidate_scorer` (deterministic heuristic segment scorer capped at 10)
+  - Tool 4 implementation: `track_speaker_position` (MediaPipe BlazeFace bounding-box tracking)
+  - Internal gate: `confidence_gate` (deterministic binary cutoff)
+  - Tool 5 implementation: `smooth_crop_path` (deterministic EMA/window smoothing)
+  - Tool 6 implementation: `render_vertical_clip` (async ffmpeg 9:16 vertical render)
+  - Tool 7 implementation: `export_crop_path_data` (zero-dependency CMX 3600 EDL `HH:MM:SS:FF`, XML, JSON)
+  - Standard test mocks dataset (`tests/mocks/mock_tool_data.py`)
+  - Tool unit test suite verifying schema parameter parity and execution (`tests/unit/test_tools.py`)
+- **Pending Next Step:** Step 11: Wire the Fixed Stage Sequence
 - **Known Issues / Blockers:** None

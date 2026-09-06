@@ -1,53 +1,68 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 7 COMPLETION CHECKLIST
-# Implement Typed State Schema & Reducers
+# STEP 10 COMPLETION CHECKLIST
+# Register Tools
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run unit tests for StateSchema and reducers
+[ ] Run tool unit test suite
     ```powershell
-    uv run pytest tests/unit/test_reducers.py -v
+    uv run pytest tests/unit/test_tools.py -v
     ```
-    Expected: 8 passed in <1s with 0 warnings.
+    Expected: 15 passed in <8s with 0 warnings.
 
-[ ] Run full unit test suite
+[ ] Run entire test suite across all modules
     ```powershell
     uv run pytest tests/unit/ -v
     ```
-    Expected: 13 passed in <8s.
+    Expected: 28 passed in <15s with 0 warnings.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify direct mutation protection raises StateValidationError
+[ ] Verify dual-format schema parameter parity across all 7 tools
     ```powershell
-    uv run python -c "from src.state import StateSchema; from src.config import load_config_from_env; from src.exceptions import StateValidationError; s = StateSchema(session_id='test', config=load_config_from_env());
-try:
-    s.session_id = 'mutated'
-    print('FAIL: Mutation allowed')
-except StateValidationError as e:
-    print('PASS: Mutation blocked:', e)
-"
+    uv run python -c "from tests.unit.test_tools import test_schema_parameter_parity_for_all_tools; test_schema_parameter_parity_for_all_tools(); print('ALL_7_SCHEMAS_MATCH_100_PERCENT')"
     ```
-    Expected: `PASS: Mutation blocked: Direct assignment to field 'session_id' on StateSchema is prohibited. All state mutations must route through reducer functions in src.state.reducers.`
+    Expected: `ALL_7_SCHEMAS_MATCH_100_PERCENT`
+    If wrong: Check field names between Pydantic input models and JSON Schema property dictionaries in `src/tools/schemas/`.
 
-[ ] Verify state update routing via apply_state_update
+[ ] Verify CMX 3600 timecode generation
     ```powershell
-    uv run python -c "from src.state import StateSchema, FileRef, apply_state_update; from src.config import load_config_from_env; s = StateSchema(session_id='test', config=load_config_from_env()); s = apply_state_update(s, 'source_video', FileRef(path='A:/test.mp4')); print('UPDATED_SOURCE:', s.source_video.path)"
+    uv run python -c "from src.tools.export_crop_path_data import _ms_to_timecode; print('TIMECODE_CHECK:', _ms_to_timecode(1000, 25.0), _ms_to_timecode(5000, 30.0))"
     ```
-    Expected: `UPDATED_SOURCE: A:/test.mp4`
+    Expected: `TIMECODE_CHECK: 00:00:01:00 00:00:05:00`
+    If wrong: Check millisecond-to-frame conversion logic in `src/tools/export_crop_path_data.py`.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/state/schema.py` — Central StateSchema with 13 locked fields and 12 supporting Pydantic V2 domain models.
-[ ] File: `src/state/reducers.py` — 4 locked state reducers (`immutable_after_init`, `append_only`, `merge_by_key`, `last_write_wins`), `apply_state_update` dispatcher, and precondition verifiers.
-[ ] File: `src/state/__init__.py` — Package export interface for state models, reducers, and precondition checkers.
-[ ] File: `tests/unit/test_reducers.py` — Unit test suite verifying reducer invariants, candidate capping, and direct mutation protection.
-[ ] Feature: Immutability Protection — Prohibits direct attribute assignment on StateSchema, enforcing mutation strictly through reducers.
-[ ] Feature: Gating Preconditions — `verify_render_precondition` and `verify_export_precondition` enforcing render gates and paired deliverables.
+[ ] File: `src/tools/schemas/decode_and_validate_source.py` — Pydantic V2 + strict MCP JSON Schema for Tool 1.
+[ ] File: `src/tools/schemas/transcribe_audio.py` — Pydantic V2 + strict MCP JSON Schema for Tool 2.
+[ ] File: `src/tools/schemas/detect_speech_pauses.py` — Pydantic V2 + strict MCP JSON Schema for Tool 3.
+[ ] File: `src/tools/schemas/candidate_scorer.py` — Pydantic V2 + strict MCP JSON Schema for Candidate Scorer.
+[ ] File: `src/tools/schemas/track_speaker_position.py` — Pydantic V2 + strict MCP JSON Schema for Tool 4.
+[ ] File: `src/tools/schemas/confidence_gate.py` — Pydantic V2 + strict MCP JSON Schema for Confidence Gate.
+[ ] File: `src/tools/schemas/smooth_crop_path.py` — Pydantic V2 + strict MCP JSON Schema for Tool 5.
+[ ] File: `src/tools/schemas/render_vertical_clip.py` — Pydantic V2 + strict MCP JSON Schema for Tool 6.
+[ ] File: `src/tools/schemas/export_crop_path_data.py` — Pydantic V2 + strict MCP JSON Schema for Tool 7.
+[ ] File: `src/tools/decode_and_validate_source.py` — Async ffprobe media validation and stream extraction.
+[ ] File: `src/tools/transcribe_audio.py` — In-process Faster-Whisper transcription with single-retry fallback.
+[ ] File: `src/tools/detect_speech_pauses.py` — Silero VAD speech span and pause detection.
+[ ] File: `src/tools/candidate_scorer.py` — Deterministic candidate segment scoring capped at 10.
+[ ] File: `src/tools/track_speaker_position.py` — MediaPipe BlazeFace tracking (bounding box + confidence only).
+[ ] File: `src/tools/confidence_gate.py` — Deterministic binary threshold gating (`tracking_confidence >= threshold`).
+[ ] File: `src/tools/smooth_crop_path.py` — Deterministic EMA/window smoothing generating 9:16 crop keyframes.
+[ ] File: `src/tools/render_vertical_clip.py` — Async ffmpeg vertical video renderer (1080x1920, source copy audio).
+[ ] File: `src/tools/export_crop_path_data.py` — Zero-dependency CMX 3600 EDL, XML, and JSON exporter.
+[ ] File: `src/tools/__init__.py` — Package export interface for tools and helpers.
+[ ] File: `src/tools/schemas/__init__.py` — Package export interface for schemas and JSON Schema constants.
+[ ] File: `tests/mocks/mock_tool_data.py` — Authoritative mock datasets for all 7 tools and pipeline controller.
+[ ] File: `tests/unit/test_tools.py` — Comprehensive unit test suite (15 tests) verifying tools, schemas, and formats.
+[ ] Feature: Dual-Format Schemas — Complete parameter parity between Pydantic models and MCP JSON Schemas.
+[ ] Feature: Biometric Compliance — Speaker tracking strictly restricted to 2D bounding boxes, zero facial mesh or identity extraction.
+[ ] Feature: Sandboxed Path Security — Strict enforcement of allowed roots and prohibition of overwriting source files.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -55,31 +70,31 @@ except StateValidationError as e:
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path src/state/schema.py, src/state/reducers.py, tests/unit/test_reducers.py
+Test-Path src/tools/decode_and_validate_source.py, src/tools/transcribe_audio.py, src/tools/detect_speech_pauses.py, src/tools/candidate_scorer.py, src/tools/track_speaker_position.py, src/tools/confidence_gate.py, src/tools/smooth_crop_path.py, src/tools/render_vertical_clip.py, src/tools/export_crop_path_data.py, tests/unit/test_tools.py
 ```
-✅ Expected: `True` for all 3 files.
-❌ If missing: Check file creation in `src/state/` and `tests/unit/`.
+✅ Expected: `True` for all 10 files.
+❌ If missing: Verify tool implementations in `src/tools/` and `tests/unit/`.
 
-Test 2 — Reducers Unit Test Suite:
+Test 2 — Environment / Dependencies:
 ```powershell
-uv run pytest tests/unit/test_reducers.py -v
+uv run python -c "import faster_whisper, mediapipe, torch, scipy; print('ALL_PACKAGES_AVAILABLE')"
 ```
-✅ Expected: 8 passed in <1s.
-❌ If errors: Inspect reducer function signatures and Pydantic model configurations.
+✅ Expected: `ALL_PACKAGES_AVAILABLE`
+❌ If errors: Run `uv sync --extra dev` to reinstall dependencies.
 
-Test 3 — Full Unit Test Suite:
+Test 3 — Tool Unit Test Suite:
+```powershell
+uv run pytest tests/unit/test_tools.py -v
+```
+✅ Expected: 15 passed in <8s.
+❌ If errors: Inspect failing test case and stack trace.
+
+Test 4 — Full Unit Test Suite:
 ```powershell
 uv run pytest tests/unit/ -v
 ```
-✅ Expected: 13 passed in <8s.
-❌ If errors: Verify no regressions in `test_model_loading.py`.
-
-Test 4 — State Schema Field Count Verification:
-```powershell
-uv run python -c "from src.state import StateSchema; fields = list(StateSchema.model_fields.keys()); assert len(fields) == 13; print('13_FIELDS_OK:', fields)"
-```
-✅ Expected: `13_FIELDS_OK: ['session_id', 'source_video', 'transcript_segments', 'vad_segments', 'candidate_segments', 'tracking_results', 'confidence_gate_results', 'crop_paths', 'rendered_clips', 'crop_path_exports', 'skipped_segments', 'error_logs', 'config']`
-❌ If wrong: Compare fields with AGENT_ORCHESTRATION_BLUEPRINT.md Section 3.
+✅ Expected: 28 passed in <15s.
+❌ If errors: Verify no regressions across `test_model_loading.py`, `test_reducers.py`, and `test_tools.py`.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -96,11 +111,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 7: Implement Typed State Schema & Reducers — implemented 13-field StateSchema, 4 reducers, and unit test suite"
+git commit -m "Step 10: Register Tools — implemented 7 tools, dual-format schemas, and unit test suite"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 10 until:
+✋ DO NOT proceed to Step 11 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

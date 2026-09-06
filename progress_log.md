@@ -247,3 +247,57 @@
 - `uv run pytest tests/unit/ -v` passed all 13 tests across the entire unit test suite.
 - Pass
 ---
+
+## Step 10 — Register Tools
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented all 7 local tool modules and dual-format schemas (Pydantic V2 + strict MCP JSON Schema constants):
+  - Tool 1: `src/tools/decode_and_validate_source.py` & `src/tools/schemas/decode_and_validate_source.py` (Async ffprobe subprocess video/audio stream validation)
+  - Tool 2: `src/tools/transcribe_audio.py` & `src/tools/schemas/transcribe_audio.py` (Faster-Whisper in-process via `asyncio.to_thread` with automatic fallback retry)
+  - Tool 3: `src/tools/detect_speech_pauses.py` & `src/tools/schemas/detect_speech_pauses.py` (Local Silero VAD speech span and pause detection)
+  - Internal Scoring: `src/tools/candidate_scorer.py` & `src/tools/schemas/candidate_scorer.py` (Deterministic heuristic segment scorer capped at 10)
+  - Tool 4: `src/tools/track_speaker_position.py` & `src/tools/schemas/track_speaker_position.py` (MediaPipe BlazeFace bounding-box tracking with zero biometric extraction)
+  - Internal Gating: `src/tools/confidence_gate.py` & `src/tools/schemas/confidence_gate.py` (Deterministic binary confidence threshold gate)
+  - Tool 5: `src/tools/smooth_crop_path.py` & `src/tools/schemas/smooth_crop_path.py` (Deterministic EMA/window smoothing filter producing 9:16 crop keyframes)
+  - Tool 6: `src/tools/render_vertical_clip.py` & `src/tools/schemas/render_vertical_clip.py` (Async ffmpeg render with crop/scale filters, 1080x1920 output, and source copy audio)
+  - Tool 7: `src/tools/export_crop_path_data.py` & `src/tools/schemas/export_crop_path_data.py` (Zero-dependency CMX 3600 EDL `HH:MM:SS:FF`, XML, and JSON serializer)
+- Created standard mock dataset in `tests/mocks/mock_tool_data.py` matching specifications verbatim.
+- Built comprehensive unit test suite in `tests/unit/test_tools.py` verifying parameter parity across all 7 tools, execution on `simple_case.mp4`, timecode formatting, and sandbox security.
+
+**Files Created:**
+- `src/tools/schemas/decode_and_validate_source.py`
+- `src/tools/schemas/transcribe_audio.py`
+- `src/tools/schemas/detect_speech_pauses.py`
+- `src/tools/schemas/candidate_scorer.py`
+- `src/tools/schemas/track_speaker_position.py`
+- `src/tools/schemas/confidence_gate.py`
+- `src/tools/schemas/smooth_crop_path.py`
+- `src/tools/schemas/render_vertical_clip.py`
+- `src/tools/schemas/export_crop_path_data.py`
+- `src/tools/decode_and_validate_source.py`
+- `src/tools/transcribe_audio.py`
+- `src/tools/detect_speech_pauses.py`
+- `src/tools/candidate_scorer.py`
+- `src/tools/track_speaker_position.py`
+- `src/tools/confidence_gate.py`
+- `src/tools/smooth_crop_path.py`
+- `src/tools/render_vertical_clip.py`
+- `src/tools/export_crop_path_data.py`
+- `tests/mocks/mock_tool_data.py`
+- `tests/unit/test_tools.py`
+
+**Files Modified:**
+- `src/tools/__init__.py` — Exported all tool functions and helpers.
+- `src/tools/schemas/__init__.py` — Exported all tool Pydantic models and JSON Schema constants.
+- `progress_log.md` — Appended Step 10 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_tools.py -v` passed all 15 tests.
+- `uv run pytest tests/unit/ -v` passed all 28 tests across model loading, reducers, and tools.
+- Pass
+---
