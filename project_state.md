@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 2: Initialize Project Manifest & Install Dependencies
+- **Last Completed Step:** Step 3: Generate Coding Assistant Context File (CLAUDE.md)
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -15,5 +15,6 @@
   - OpenTelemetry SDK without conflicting network exporters (`protobuf<5` compatibility preserved)
   - Frontend SPA manifest (`frontend/package.json`) and locked dependencies (`frontend/pnpm-lock.yaml`)
   - Vercel AI SDK v6 (`ai ^6.0.0`), React 19, TypeScript, and Vite dependencies
-- **Pending Next Step:** Step 3: Generate Coding Assistant Context File (CLAUDE.md)
+  - Coding Assistant Context document (`CLAUDE.md`) codifying invariants, boundaries, and anti-patterns
+- **Pending Next Step:** Step 4: Scaffold Directory Structure
 - **Known Issues / Blockers:** None

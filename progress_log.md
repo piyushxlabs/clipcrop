@@ -83,3 +83,28 @@
 - `pnpm list` in `frontend/` reported all 8 packages resolved and verified.
 - Pass
 ---
+
+## Step 3 — Generate Coding Assistant Context File
+**Date:** September 6, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Created `CLAUDE.md` in repository root matching `docs/AGENT_MASTER_PLAN.md` Section 3 verbatim.
+- Codified strict runtime architecture rules: Python 3.11 LTS (`>=3.11,<3.12`), async I/O, `concurrent.futures.ProcessPoolExecutor` for CPU-bound tracking, strict Pydantic V2 tool schemas + matching MCP JSON Schemas, and custom `ClipCropError` hierarchy.
+- Locked architectural boundaries: state in `src/state/schema.py`, 4 explicit reducers in `src/state/reducers.py`, tools in `src/tools/`, ephemeral in-process state (no SQLite/Postgres persistence), local OTel file export, and domain streaming events in `src/ui/event_types.py`.
+- Formulated strict anti-patterns: zero runtime network calls, no direct state mutation, silence-over-guessing fallback, binary confidence gate enforcement (no rendering skipped segments), no HITL UI/endpoints, no cloud telemetry, and no hardcoded paths.
+- Linked the five authoritative source documents: `AGENT_BEHAVIOR_PROFILE.md`, `AGENT_ORCHESTRATION_BLUEPRINT.md`, `AGENT_LOGIC_SPEC.md`, `INTERFACE_OBSERVABILITY_SYSTEM.md`, and `AGENT_MASTER_PLAN.md`.
+
+**Files Created:**
+- `CLAUDE.md` — Authoritative context document establishing operational boundaries, invariants, and rules for coding agents.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 3 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- Verified `CLAUDE.md` exists and content matches Section 3 of `docs/AGENT_MASTER_PLAN.md` exactly (78 lines, 5,426 characters).
+- Pass
+---

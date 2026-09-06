@@ -26,4 +26,11 @@ venv/
 # Node / Frontend
 node_modules/
 dist/
-.pnpm-store/
+.pnpm-store/    
+
+
+# AXIOM Protocol / Tracking Files
+progress_log.md
+project_state.md
+TECHNICAL_NOTES.md
+do_after_completion.md

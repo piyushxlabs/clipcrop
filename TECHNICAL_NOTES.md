@@ -35,3 +35,11 @@
 - Step 18 (Integrate Telemetry & Observability) will implement a custom local-file `SpanExporter` using core `opentelemetry-sdk` interfaces without network egress.
 - Zero dependency-resolution conflicts between MediaPipe, PyTorch, CTranslate2, and OpenTelemetry.
 ---
+
+## Step 3 — Coding Assistant Context Codification
+**Decision:** Written verbatim from `docs/AGENT_MASTER_PLAN.md` Section 3 into `CLAUDE.md`.
+**Reason:** Strict adherence to authoritative specifications without alteration.
+**Impact:** Governs coding assistant actions, preventing unauthorized architectural deviations or anti-pattern introduction.
+
+Step 3 — No deviations from spec.
+---
