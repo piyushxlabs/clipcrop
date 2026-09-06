@@ -1,51 +1,48 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 1 COMPLETION CHECKLIST
-# Environment Setup
+# STEP 2 COMPLETION CHECKLIST
+# Initialize Project Manifest & Install Dependencies
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Verify FFmpeg is accessible in your current shell session
+[ ] Verify Python backend virtual environment and packages
     ```powershell
-    & "C:\Users\DELL\AppData\Local\Microsoft\WinGet\Packages\Gyan.FFmpeg_Microsoft.Winget.Source_8wekyb3d8bbwe\ffmpeg-9.0.1-full_build\bin\ffmpeg.exe" -version
+    uv run python -c "import fastapi, pydantic, mediapipe, faster_whisper, torch, scipy, numpy, opentelemetry; print('ALL_BACKEND_PACKAGES_LOADED')"
     ```
-    Expected: ffmpeg version 9.0.1 output with full build configuration.
+    Expected: `ALL_BACKEND_PACKAGES_LOADED` without any import errors or protobuf conflicts.
 
-[ ] Confirm `.env` points to valid local workspace paths
+[ ] Verify frontend packages in pnpm store
     ```powershell
-    Get-Content .env
+    cd frontend; pnpm list; cd ..
     ```
-    Expected: All 9 `CLIPCROP_*` keys present without placeholder values.
+    Expected: `ai@6.0.277`, `react@19.2.8`, `react-dom@19.2.8`, `vite@6.4.3`, etc. listed.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Re-run model asset verification check
+[ ] Confirm PyTorch CPU-only configuration
     ```powershell
-    & "C:\Users\DELL\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" scripts/download_models.py
+    uv run python -c "import torch; assert not torch.cuda.is_available(); print(f'Torch {torch.__version__} CPU verified')"
     ```
-    Expected: All 4 verification items display `PASS`.
-    If wrong: Ensure network access is active and re-run the script.
+    Expected: `Torch 2.14.0+cpu CPU verified`
 
-[ ] Verify sandboxed directory hierarchy
+[ ] Confirm pytest test runner executes cleanly
     ```powershell
-    Test-Path uploads, outputs, outputs/traces, models
+    uv run pytest --version
     ```
-    Expected: True for all 4 paths.
+    Expected: `pytest 9.1.1`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `.env.example` — Template defining all 9 required `CLIPCROP_*` environment keys with defaults.
-[ ] File: `.env` — Active configuration instance with sandboxed workspace paths.
-[ ] File: `scripts/download_models.py` — Idempotent offline model downloader and verification tool.
-[ ] File: `models/blaze_face_short_range.task` — MediaPipe BlazeFace face detector model.
-[ ] File: `models/silero_vad.jit` — Standalone Silero VAD TorchScript model.
-[ ] File: `models/silero-vad-master/hubconf.py` — Silero VAD repository for offline `torch.hub` loading.
-[ ] File: `models/faster-whisper-base.en/` — INT8 CTranslate2 speech recognition weights and vocab.
-[ ] Config: `.gitignore` — Strictly excludes `.env`, `models/`, `uploads/`, `outputs/`, and build artifacts.
-[ ] Package: Gyan.FFmpeg@9.0.1 — Installed system binaries for audio/video decoding and rendering.
+[ ] File: `pyproject.toml` — Backend manifest with Python 3.11 lock and PyTorch CPU index.
+[ ] File: `uv.lock` — Deterministic lockfile for all 68 backend Python dependencies.
+[ ] File: `frontend/package.json` — Frontend manifest with React 19, AI SDK v6, and Vite.
+[ ] File: `frontend/pnpm-lock.yaml` — Deterministic lockfile for all frontend dependencies.
+[ ] File: `frontend/pnpm-workspace.yaml` — pnpm workspace configuration.
+[ ] Feature: CPU-Only Torch Mapping — uv source mapping to PyTorch CPU wheel index.
+[ ] Feature: Conflict-Free Telemetry — OpenTelemetry SDK configured without network OTLP packages.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -53,32 +50,37 @@
 
 Test 1 — Files Exist:
 ```powershell
-Get-ChildItem -Path .env, .env.example, scripts/download_models.py, models/*
+Test-Path pyproject.toml, uv.lock, frontend/package.json, frontend/pnpm-lock.yaml, .venv, frontend/node_modules
 ```
-✅ Expected: `.env`, `.env.example`, `scripts/download_models.py`, `blaze_face_short_range.task`, `silero_vad.jit`, `silero-vad-master`, and `faster-whisper-base.en`.
-❌ If missing: Re-run `& "C:\Users\DELL\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" scripts/download_models.py`.
+✅ Expected: True for all 6 paths.
+❌ If missing: Re-run `uv sync --extra dev --python 3.11` or `cd frontend; pnpm install; cd ..`.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-& "C:\Users\DELL\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" --version
-uv --version
+uv run python -c "import sys; assert sys.version_info >= (3, 11) and sys.version_info < (3, 12); print('PYTHON_3_11_LTS_OK')"
 ```
-✅ Expected: Python 3.11.x and uv CLI tool present.
-❌ If errors: Verify uv installation at `C:\Users\DELL\.local\bin\uv.exe`.
+✅ Expected: `PYTHON_3_11_LTS_OK`
+❌ If errors: Ensure uv uses Python 3.11.x via `--python 3.11`.
 
 Test 3 — Server or Process Start:
 ```powershell
-& "C:\Users\DELL\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" -c "from pathlib import Path; assert Path('.env').is_file(); print('ENV_OK')"
+uv run python -c "import uvicorn; print('UVICORN_READY')"
 ```
-✅ Expected: `ENV_OK`
-❌ If errors: Ensure `.env` is created in repository root.
+✅ Expected: `UVICORN_READY`
+❌ If errors: Check uvicorn installation in `.venv`.
 
 Test 4 — Functional Check:
 ```powershell
-& "C:\Users\DELL\AppData\Roaming\uv\python\cpython-3.11-windows-x86_64-none\python.exe" -c "from pathlib import Path; m = Path('models'); assert (m / 'blaze_face_short_range.task').stat().st_size > 0; assert (m / 'silero_vad.jit').stat().st_size > 0; assert (m / 'faster-whisper-base.en/model.bin').stat().st_size > 100_000_000; print('ALL_ASSETS_VERIFIED')"
+uv run python -c "
+import importlib.metadata, opentelemetry.sdk.trace
+tracer = opentelemetry.sdk.trace.TracerProvider().get_tracer('test')
+with tracer.start_as_current_span('step2-verify') as span:
+    span.set_attribute('step', 2)
+print('OPENTELEMETRY_CORE_FUNCTIONAL')
+"
 ```
-✅ Expected: `ALL_ASSETS_VERIFIED`
-❌ If wrong: Re-run `python scripts/download_models.py` to complete asset downloads.
+✅ Expected: `OPENTELEMETRY_CORE_FUNCTIONAL`
+❌ If wrong: Check opentelemetry-sdk installation.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -95,11 +97,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 1: Environment Setup — configured sandboxed env and cached offline perception models"
+git commit -m "Step 2: Initialize Project Manifest & Install Dependencies — configured pyproject.toml, package.json, and resolved all packages"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 2 until:
+✋ DO NOT proceed to Step 3 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully
