@@ -1,68 +1,51 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 10 COMPLETION CHECKLIST
-# Register Tools
+# STEP 11 COMPLETION CHECKLIST
+# Wire the Fixed Stage Sequence
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run tool unit test suite
+[ ] Run pipeline controller unit and structural tests
     ```powershell
-    uv run pytest tests/unit/test_tools.py -v
+    uv run pytest tests/unit/test_pipeline_controller.py -v
     ```
-    Expected: 15 passed in <8s with 0 warnings.
+    Expected: 8 passed in <5s with 0 warnings.
 
-[ ] Run entire test suite across all modules
+[ ] Run full unit test suite across all modules
     ```powershell
     uv run pytest tests/unit/ -v
     ```
-    Expected: 28 passed in <15s with 0 warnings.
+    Expected: 36 passed in <15s with 0 warnings.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify dual-format schema parameter parity across all 7 tools
+[ ] Verify dry-run execution on simple_case fixture
     ```powershell
-    uv run python -c "from tests.unit.test_tools import test_schema_parameter_parity_for_all_tools; test_schema_parameter_parity_for_all_tools(); print('ALL_7_SCHEMAS_MATCH_100_PERCENT')"
+    uv run python -m src.agents.pipeline_controller --input tests/fixtures/simple_case.mp4 --dry-run
     ```
-    Expected: `ALL_7_SCHEMAS_MATCH_100_PERCENT`
-    If wrong: Check field names between Pydantic input models and JSON Schema property dictionaries in `src/tools/schemas/`.
+    Expected: `Pipeline finished successfully: {'session_id': '...', 'status': 'dry_run_success', ...}`
+    If wrong: Check `--input` argument parsing and path sandbox validation in `src/agents/pipeline_controller.py`.
 
-[ ] Verify CMX 3600 timecode generation
+[ ] Verify stage count and sequence order
     ```powershell
-    uv run python -c "from src.tools.export_crop_path_data import _ms_to_timecode; print('TIMECODE_CHECK:', _ms_to_timecode(1000, 25.0), _ms_to_timecode(5000, 30.0))"
+    uv run python -c "from src.agents.pipeline_controller import PIPELINE_STAGES_ORDER; print('STAGES:', [s.value for s in PIPELINE_STAGES_ORDER]); assert len(PIPELINE_STAGES_ORDER) == 8"
     ```
-    Expected: `TIMECODE_CHECK: 00:00:01:00 00:00:05:00`
-    If wrong: Check millisecond-to-frame conversion logic in `src/tools/export_crop_path_data.py`.
+    Expected: `STAGES: ['ingest_and_validate', 'transcribe_and_segment', 'score_candidates', 'track_speaker_position', 'confidence_gate', 'smooth_crop_path', 'render_and_export', 'aggregate_and_terminate']`
+    If wrong: Compare `PIPELINE_STAGES_ORDER` with `AGENT_ORCHESTRATION_BLUEPRINT.md` Section 4.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/tools/schemas/decode_and_validate_source.py` — Pydantic V2 + strict MCP JSON Schema for Tool 1.
-[ ] File: `src/tools/schemas/transcribe_audio.py` — Pydantic V2 + strict MCP JSON Schema for Tool 2.
-[ ] File: `src/tools/schemas/detect_speech_pauses.py` — Pydantic V2 + strict MCP JSON Schema for Tool 3.
-[ ] File: `src/tools/schemas/candidate_scorer.py` — Pydantic V2 + strict MCP JSON Schema for Candidate Scorer.
-[ ] File: `src/tools/schemas/track_speaker_position.py` — Pydantic V2 + strict MCP JSON Schema for Tool 4.
-[ ] File: `src/tools/schemas/confidence_gate.py` — Pydantic V2 + strict MCP JSON Schema for Confidence Gate.
-[ ] File: `src/tools/schemas/smooth_crop_path.py` — Pydantic V2 + strict MCP JSON Schema for Tool 5.
-[ ] File: `src/tools/schemas/render_vertical_clip.py` — Pydantic V2 + strict MCP JSON Schema for Tool 6.
-[ ] File: `src/tools/schemas/export_crop_path_data.py` — Pydantic V2 + strict MCP JSON Schema for Tool 7.
-[ ] File: `src/tools/decode_and_validate_source.py` — Async ffprobe media validation and stream extraction.
-[ ] File: `src/tools/transcribe_audio.py` — In-process Faster-Whisper transcription with single-retry fallback.
-[ ] File: `src/tools/detect_speech_pauses.py` — Silero VAD speech span and pause detection.
-[ ] File: `src/tools/candidate_scorer.py` — Deterministic candidate segment scoring capped at 10.
-[ ] File: `src/tools/track_speaker_position.py` — MediaPipe BlazeFace tracking (bounding box + confidence only).
-[ ] File: `src/tools/confidence_gate.py` — Deterministic binary threshold gating (`tracking_confidence >= threshold`).
-[ ] File: `src/tools/smooth_crop_path.py` — Deterministic EMA/window smoothing generating 9:16 crop keyframes.
-[ ] File: `src/tools/render_vertical_clip.py` — Async ffmpeg vertical video renderer (1080x1920, source copy audio).
-[ ] File: `src/tools/export_crop_path_data.py` — Zero-dependency CMX 3600 EDL, XML, and JSON exporter.
-[ ] File: `src/tools/__init__.py` — Package export interface for tools and helpers.
-[ ] File: `src/tools/schemas/__init__.py` — Package export interface for schemas and JSON Schema constants.
-[ ] File: `tests/mocks/mock_tool_data.py` — Authoritative mock datasets for all 7 tools and pipeline controller.
-[ ] File: `tests/unit/test_tools.py` — Comprehensive unit test suite (15 tests) verifying tools, schemas, and formats.
-[ ] Feature: Dual-Format Schemas — Complete parameter parity between Pydantic models and MCP JSON Schemas.
-[ ] Feature: Biometric Compliance — Speaker tracking strictly restricted to 2D bounding boxes, zero facial mesh or identity extraction.
-[ ] Feature: Sandboxed Path Security — Strict enforcement of allowed roots and prohibition of overwriting source files.
+[ ] File: `src/agents/pipeline_controller.py` — Complete 8-stage forward-only pipeline controller with ProcessPoolExecutor parallel fan-out and reducer-governed state updates.
+[ ] File: `src/tools/track_speaker_position.py` — Process worker function `_track_frames_process_worker` and optional `executor` parameter for multiprocessing.
+[ ] File: `tests/unit/test_pipeline_controller.py` — 8 comprehensive unit and structural tests verifying sequence, fan-out cap, access matrix, gating, cancellation, and circuit breaker.
+[ ] Feature: Forward-Only 8-Stage Execution — Deterministic sequencing with zero loops, zero cycles, and no dynamic graph delegation.
+[ ] Feature: Bounded Parallel Fan-Out — `track_speaker_position` fanned out via ProcessPoolExecutor capped strictly at `CLIPCROP_MAX_CANDIDATES = 10`.
+[ ] Feature: Silence-Over-Guessing — Short-circuit termination via `zero_candidates` permanent failure when speech is absent.
+[ ] Feature: Paired Deliverables Contract — Render vertical clip immediately followed by crop path export.
+[ ] Feature: Circuit Breakers — Mid-session cancellation and 90-second run-wide time budget protection.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -70,31 +53,31 @@
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path src/tools/decode_and_validate_source.py, src/tools/transcribe_audio.py, src/tools/detect_speech_pauses.py, src/tools/candidate_scorer.py, src/tools/track_speaker_position.py, src/tools/confidence_gate.py, src/tools/smooth_crop_path.py, src/tools/render_vertical_clip.py, src/tools/export_crop_path_data.py, tests/unit/test_tools.py
+Test-Path src/agents/pipeline_controller.py, tests/unit/test_pipeline_controller.py
 ```
-✅ Expected: `True` for all 10 files.
-❌ If missing: Verify tool implementations in `src/tools/` and `tests/unit/`.
+✅ Expected: `True` for both files.
+❌ If missing: Check file creation in `src/agents/` and `tests/unit/`.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import faster_whisper, mediapipe, torch, scipy; print('ALL_PACKAGES_AVAILABLE')"
+uv run python -c "import src.agents.pipeline_controller; print('PIPELINE_CONTROLLER_IMPORT_OK')"
 ```
-✅ Expected: `ALL_PACKAGES_AVAILABLE`
-❌ If errors: Run `uv sync --extra dev` to reinstall dependencies.
+✅ Expected: `PIPELINE_CONTROLLER_IMPORT_OK`
+❌ If errors: Run `uv sync --extra dev` to verify environment dependencies.
 
-Test 3 — Tool Unit Test Suite:
+Test 3 — Pipeline Controller Unit Tests:
 ```powershell
-uv run pytest tests/unit/test_tools.py -v
+uv run pytest tests/unit/test_pipeline_controller.py -v
 ```
-✅ Expected: 15 passed in <8s.
-❌ If errors: Inspect failing test case and stack trace.
+✅ Expected: 8 passed in <5s.
+❌ If errors: Inspect failing test case and traceback.
 
 Test 4 — Full Unit Test Suite:
 ```powershell
 uv run pytest tests/unit/ -v
 ```
-✅ Expected: 28 passed in <15s.
-❌ If errors: Verify no regressions across `test_model_loading.py`, `test_reducers.py`, and `test_tools.py`.
+✅ Expected: 36 passed in <15s.
+❌ If errors: Verify no regressions across all unit test suites.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -111,11 +94,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 10: Register Tools — implemented 7 tools, dual-format schemas, and unit test suite"
+git commit -m "Step 11: Wire the Fixed Stage Sequence — implemented 8-stage pipeline controller with parallel fan-out and structural tests"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 11 until:
+✋ DO NOT proceed to Step 12 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

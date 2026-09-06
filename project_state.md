@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 10: Register Tools
+- **Last Completed Step:** Step 11: Wire the Fixed Stage Sequence
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -20,7 +20,6 @@
   - Root project overview and architecture guide (`README.md`)
   - Domain exception hierarchy (`src/exceptions.py` rooted at `ClipCropError`)
   - Runtime configuration system (`src/config.py` with strict Pydantic V2 `RuntimeConfig`)
-  - Deterministic 8-stage pipeline controller skeleton (`src/agents/pipeline_controller.py` with `--dry-run` validation)
   - Offline perception model loader and health-check system (`src/tools/model_loader.py`)
   - Simple Case test video fixture (`tests/fixtures/simple_case.mp4`)
   - Socket-level network-call-blocking test harness and model loading test suite (`tests/unit/test_model_loading.py`)
@@ -43,5 +42,12 @@
   - Tool 7 implementation: `export_crop_path_data` (zero-dependency CMX 3600 EDL `HH:MM:SS:FF`, XML, JSON)
   - Standard test mocks dataset (`tests/mocks/mock_tool_data.py`)
   - Tool unit test suite verifying schema parameter parity and execution (`tests/unit/test_tools.py`)
-- **Pending Next Step:** Step 11: Wire the Fixed Stage Sequence
+  - Full 8-stage forward-only pipeline controller (`src/agents/pipeline_controller.py`)
+  - Bounded per-segment parallel fan-out via `ProcessPoolExecutor` with `CLIPCROP_MAX_CANDIDATES = 10` hard cap
+  - Silence-over-guessing policy raising `PermanentFailureError("zero_candidates")`
+  - Paired deliverable contract guaranteeing 1:1 render clip and crop path export pairing
+  - Mid-session cancellation support (`controller.cancel()`) halting cleanly between stages
+  - 90-second run-wide time budget circuit breaker check
+  - Unit and structural test suite verifying stage sequence and boundaries (`tests/unit/test_pipeline_controller.py`)
+- **Pending Next Step:** Step 12: Implement the Deterministic Reasoning Loop
 - **Known Issues / Blockers:** None

@@ -173,9 +173,37 @@ def _track_frames_sync(
     return positions, segment_conf
 
 
+def _track_frames_process_worker(
+    models_dir: str,
+    frames: list[np.ndarray],
+    timestamps: list[int],
+    frame_sample_stride: int,
+    min_confidence: float,
+    frame_width: int,
+    frame_height: int,
+) -> tuple[list[dict[str, Any]], float]:
+    """Worker function executed inside a ProcessPoolExecutor worker process."""
+    from src.config import RuntimeConfig
+    from src.tools.model_loader import load_face_detector
+
+    cfg = RuntimeConfig(models_dir=Path(models_dir))
+    detector = load_face_detector(cfg)
+    positions, conf = _track_frames_sync(
+        detector,
+        frames,
+        timestamps,
+        frame_sample_stride,
+        min_confidence,
+        frame_width,
+        frame_height,
+    )
+    return [p.model_dump() for p in positions], conf
+
+
 async def track_speaker_position(
     input_data: TrackSpeakerPositionInput,
     config: RuntimeConfig,
+    executor: Any | None = None,
 ) -> TrackSpeakerPositionOutput:
     """Detect and track the speaker's bounding-box position across one candidate segment."""
     video_path = Path(input_data.video_path)
@@ -194,17 +222,34 @@ async def track_speaker_position(
                 input_data.segment_start_ms,
                 input_data.segment_end_ms,
             )
-            detector = load_face_detector(config)
-            positions, conf = await asyncio.to_thread(
-                _track_frames_sync,
-                detector,
-                frames,
-                timestamps,
-                input_data.frame_sample_stride,
-                input_data.min_detection_confidence,
-                fw,
-                fh,
-            )
+
+            if executor is not None:
+                loop = asyncio.get_running_loop()
+                raw_positions, conf = await loop.run_in_executor(
+                    executor,
+                    _track_frames_process_worker,
+                    str(config.models_dir),
+                    frames,
+                    timestamps,
+                    input_data.frame_sample_stride,
+                    input_data.min_detection_confidence,
+                    fw,
+                    fh,
+                )
+                positions = [FramePositionModel.model_validate(p) for p in raw_positions]
+            else:
+                detector = load_face_detector(config)
+                positions, conf = await asyncio.to_thread(
+                    _track_frames_sync,
+                    detector,
+                    frames,
+                    timestamps,
+                    input_data.frame_sample_stride,
+                    input_data.min_detection_confidence,
+                    fw,
+                    fh,
+                )
+
             return TrackSpeakerPositionOutput(
                 success=True,
                 per_frame_positions=positions,

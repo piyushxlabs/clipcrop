@@ -301,3 +301,39 @@
 - `uv run pytest tests/unit/ -v` passed all 28 tests across model loading, reducers, and tools.
 - Pass
 ---
+
+## Step 11 — Wire the Fixed Stage Sequence
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented full 8-stage forward-only pipeline execution sequence in `src/agents/pipeline_controller.py` strictly matching `AGENT_ORCHESTRATION_BLUEPRINT.md` Section 4 and `AGENT_LOGIC_SPEC.md` Section 2:
+  - Stage 1: Ingest & Validate via `decode_and_validate_source` updating `state.source_video` via `immutable_after_init`.
+  - Stage 2: Transcribe & Segment concurrently via `transcribe_audio` and `detect_speech_pauses` via `asyncio.gather`, updating `transcript_segments` and `vad_segments` via `append_only`.
+  - Stage 3: Score Candidates via deterministic heuristic `score_candidate_segments`, updating `candidate_segments` via `last_write_wins` with `CLIPCROP_MAX_CANDIDATES = 10` cap and silence-over-guessing policy raising `PermanentFailureError("zero_candidates")`.
+  - Stage 4: Track Speaker Position fanning out `track_speaker_position` across candidate segments using `ProcessPoolExecutor` for CPU-bound face detection, updating `tracking_results` via `merge_by_key`.
+  - Stage 5: Confidence Gate evaluating `confidence_gate_decision` per candidate segment, updating `confidence_gate_results` via `merge_by_key`, and appending rejected segments to `skipped_segments`.
+  - Stage 6: Smooth Crop Path generating 9:16 crop keyframes via `smooth_crop_path` for render-approved segments, updating `crop_paths` via `merge_by_key`.
+  - Stage 7: Render & Export executing `render_vertical_clip` (ffmpeg 9:16) updating `rendered_clips`, immediately followed by `export_crop_path_data` updating `crop_path_exports` to guarantee paired deliverables.
+  - Stage 8: Aggregate & Terminate compiling deliverables, skip records, error logs, and elapsed time summary.
+- Implemented user cancellation check (`controller.cancel()`) halting between stages with `PermanentFailureError`.
+- Implemented 90-second run-wide time budget circuit breaker check between stages and per-candidate dispatch.
+- Created `tests/unit/test_pipeline_controller.py` with 8 comprehensive unit and structural tests verifying stage ordering, fan-out bounding, Stage-Tool Access Matrix, paired deliverables, silence-over-guessing, confidence gating, cancellation, and circuit breaker behavior.
+
+**Files Created:**
+- `tests/unit/test_pipeline_controller.py` — Unit and structural test suite (8 tests) for PipelineController.
+
+**Files Modified:**
+- `src/agents/pipeline_controller.py` — Full 8-stage forward-only controller implementation with ProcessPoolExecutor parallel fan-out and reducer state updates.
+- `src/tools/track_speaker_position.py` — Added `_track_frames_process_worker` and `executor` parameter for ProcessPoolExecutor offloading.
+- `progress_log.md` — Appended Step 11 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run python -m src.agents.pipeline_controller --input tests/fixtures/simple_case.mp4 --dry-run` passed with all 8 stages verified.
+- `uv run pytest tests/unit/test_pipeline_controller.py -v` passed all 8 tests in 3.47s.
+- `uv run pytest tests/unit/ -v` passed all 36 tests across model loading, reducers, tools, and pipeline controller in 11.84s.
+- Pass
+---

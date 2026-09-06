@@ -123,3 +123,19 @@ Step 5 — No deviations from spec.
 **Impact:**
 - In Step 11 (Wire the Fixed Stage Sequence), the `PipelineController` can invoke these 7 tools directly with complete type safety, sandboxed path validation, and deterministic output schemas.
 ---
+
+## Step 11 — ProcessPoolExecutor Worker Function Isolation & Forward-Only Sequencing
+**Decision:**
+- Implemented `_track_frames_process_worker` in `src/tools/track_speaker_position.py` passing strictly picklable primitive types (`str`, `list[np.ndarray]`, `list[int]`, `int`, `float`) and instantiating MediaPipe inside the worker process, enabling safe multiprocessing under Windows without SWIG wrapper serialization crashes.
+- Wired the 8-stage sequence in `PipelineController` using `apply_state_update()` to enforce all 4 state reducers and prevent direct field assignment.
+- Bound Stage 3 candidate ranking to hard-cap candidates at `CLIPCROP_MAX_CANDIDATES = 10` and enforced silence-over-guessing policy raising `PermanentFailureError("zero_candidates")`.
+- Enforced paired deliverables contract in Stage 7: invoking `export_crop_path_data` immediately following successful `render_vertical_clip` for the same segment.
+- Built circuit breakers for mid-session cancellation (`controller.cancel()`) and run-wide time budget exhaustion (`time_budget_seconds`).
+
+**Reason:**
+- MediaPipe C++ SWIG wrappers cannot be pickled across process boundaries on Windows. Isolating model loading into the worker process allows `ProcessPoolExecutor` to utilize multi-core CPU resources without blocking the `asyncio` event loop, fulfilling `async-io-and-pydantic-validation-mandate.md`.
+- Conforms to `graph-topology-loop-caps-and-circuit-breakers.md`, `node-tool-access-matrix-restrictions.md`, and `state-invariants-and-tool-preconditions.md`.
+
+**Impact:**
+- In Step 12 (Implement the Deterministic Reasoning Loop), the pipeline controller can execute end-to-end against real fixtures, evaluating confidence gating and termination criteria.
+---
