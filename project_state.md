@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 5: Initialize the Pipeline Controller Module
+- **Last Completed Step:** Step 6: Configure Local Models
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -21,5 +21,8 @@
   - Domain exception hierarchy (`src/exceptions.py` rooted at `ClipCropError`)
   - Runtime configuration system (`src/config.py` with strict Pydantic V2 `RuntimeConfig`)
   - Deterministic 8-stage pipeline controller skeleton (`src/agents/pipeline_controller.py` with `--dry-run` validation)
-- **Pending Next Step:** Step 6: Configure Local Models
+  - Offline perception model loader and health-check system (`src/tools/model_loader.py`)
+  - Simple Case test video fixture (`tests/fixtures/simple_case.mp4`)
+  - Socket-level network-call-blocking test harness and model loading test suite (`tests/unit/test_model_loading.py`)
+- **Pending Next Step:** Step 7: Implement Typed State Schema & Reducers
 - **Known Issues / Blockers:** None

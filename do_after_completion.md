@@ -1,46 +1,47 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 5 COMPLETION CHECKLIST
-# Initialize the Pipeline Controller Module
+# STEP 6 COMPLETION CHECKLIST
+# Configure Local Models
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run the pipeline controller with `--dry-run` and no input
+[ ] Run the offline model health-check CLI
     ```powershell
-    uv run python -m src.agents.pipeline_controller --dry-run
+    uv run python -m src.tools.model_loader
     ```
-    Expected: Cleanly raises `ClipCropError: No source video input provided for pipeline execution.` and exits with code 1.
+    Expected: Reports all three models healthy:
+    `Faster-Whisper: HEALTHY`, `MediaPipe: HEALTHY`, `Silero VAD: HEALTHY`.
 
-[ ] Verify clean import with zero side effects
+[ ] Run the model loading unit tests with network-blocking harness
     ```powershell
-    uv run python -c "import src.config, src.exceptions, src.agents.pipeline_controller; print('CLEAN_IMPORT_OK')"
+    uv run pytest tests/unit/test_model_loading.py -v
     ```
-    Expected: `CLEAN_IMPORT_OK`
+    Expected: 5 passed in <10s with zero network calls.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify RuntimeConfig validation against `.env`
+[ ] Verify existence of test fixture video
     ```powershell
-    uv run python -c "from src.config import load_config_from_env; c = load_config_from_env(); print('CONFIG_LOADED_OK:', c.confidence_threshold, c.max_candidates, c.time_budget_seconds)"
+    Test-Path tests/fixtures/simple_case.mp4
     ```
-    Expected: `CONFIG_LOADED_OK: 0.65 10 90`
+    Expected: `True`
 
-[ ] Verify pipeline stage sequencing definition
+[ ] Verify offline model loading directly via python import
     ```powershell
-    uv run python -c "from src.agents.pipeline_controller import PIPELINE_STAGES_ORDER; assert len(PIPELINE_STAGES_ORDER) == 8; print([s.value for s in PIPELINE_STAGES_ORDER])"
+    uv run python -c "from src.tools.model_loader import load_whisper_model, load_face_detector, load_silero_vad_model; from src.config import load_config_from_env; cfg = load_config_from_env(); print('LOADERS_READY')"
     ```
-    Expected: Exactly 8 stages in order from `ingest_and_validate` to `aggregate_and_terminate`.
+    Expected: `LOADERS_READY`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/exceptions.py` — Custom domain exception hierarchy rooted at `ClipCropError`.
-[ ] File: `src/config.py` — Strict Pydantic V2 `RuntimeConfig` validating all 9 `CLIPCROP_*` environment keys.
-[ ] File: `src/agents/pipeline_controller.py` — Native async forward-only 8-stage state machine skeleton with `--dry-run` support.
-[ ] Feature: Input Validation Gate — Rejects missing or inaccessible source paths with deterministic domain errors.
-[ ] Feature: Configuration Sandboxing — Validates upload, output, trace, and model directories against local paths.
+[ ] File: `src/tools/model_loader.py` — Centralized offline perception model loader and health-check system.
+[ ] File: `tests/fixtures/simple_case.mp4` — Standard 5-second 1280x720 16kHz test fixture video.
+[ ] File: `tests/unit/test_model_loading.py` — Pytest test suite with socket-level network-call-blocking verification harness.
+[ ] Feature: Offline Model Loaders — `load_whisper_model`, `load_face_detector`, and `load_silero_vad_model` strictly loading from local paths.
+[ ] Feature: Zero-Network Guarantee — Socket-level monkeypatching verifying zero outbound network calls during perception inference.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -48,42 +49,31 @@
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path src/exceptions.py, src/config.py, src/agents/pipeline_controller.py
+Test-Path src/tools/model_loader.py, tests/fixtures/simple_case.mp4, tests/unit/test_model_loading.py
 ```
 ✅ Expected: `True` for all 3 files.
-❌ If missing: Check file creation in `src/` and `src/agents/`.
+❌ If missing: Check file generation in `src/tools/`, `tests/fixtures/`, and `tests/unit/`.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import sys; assert sys.version_info >= (3, 11) and sys.version_info < (3, 12); print('PYTHON_3_11_LTS_OK')"
+uv run python -c "import faster_whisper, mediapipe, torch; print('PERCEPTION_LIBS_OK')"
 ```
-✅ Expected: `PYTHON_3_11_LTS_OK`
-❌ If errors: Ensure Python 3.11 virtual environment is active.
+✅ Expected: `PERCEPTION_LIBS_OK`
+❌ If errors: Ensure `.venv` has all dependencies installed.
 
-Test 3 — Server or Process Start:
+Test 3 — Model Health Check:
 ```powershell
-uv run python -c "import uvicorn; print('UVICORN_READY')"
+uv run python -m src.tools.model_loader
 ```
-✅ Expected: `UVICORN_READY`
-❌ If errors: Check uvicorn in `.venv`.
+✅ Expected: `[SUCCESS] All three local perception models are healthy`
+❌ If errors: Check that model files exist in `models/`.
 
-Test 4 — Functional Check:
+Test 4 — Functional Network-Blocked Test Suite:
 ```powershell
-uv run python -c "
-import asyncio
-from src.agents.pipeline_controller import run_pipeline, PIPELINE_STAGES_ORDER
-from src.exceptions import ClipCropError
-
-assert len(PIPELINE_STAGES_ORDER) == 8
-try:
-    asyncio.run(run_pipeline(source_video_path=None, dry_run=True))
-    assert False, 'Should have raised ClipCropError'
-except ClipCropError as e:
-    print('PASS: Expected ClipCropError raised and caught:', e)
-"
+uv run pytest tests/unit/test_model_loading.py -v
 ```
-✅ Expected: `PASS: Expected ClipCropError raised and caught: No source video input provided for pipeline execution. A valid source_path is required.`
-❌ If wrong: Ensure `execute()` checks `source_video_path is None`.
+✅ Expected: 5 passed.
+❌ If wrong: Check `BlockNetworkCalls` fixture and model asset paths.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -100,11 +90,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 5: Initialize the Pipeline Controller Module — implemented controller skeleton, runtime config, and exception hierarchy"
+git commit -m "Step 6: Configure Local Models — implemented model loaders, simple_case fixture, and network-blocked test harness"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 6 until:
+✋ DO NOT proceed to Step 7 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

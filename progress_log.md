@@ -184,3 +184,35 @@
 - Programmatic test verified `ClipCropError` is caught and `len(PIPELINE_STAGES_ORDER) == 8`.
 - Pass
 ---
+
+## Step 6 — Configure Local Models
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented offline model loader and health-check system in `src/tools/model_loader.py`:
+  - `load_whisper_model()`: Loads Faster-Whisper base.en INT8 model from `CLIPCROP_MODELS_DIR` with `local_files_only=True`.
+  - `load_face_detector()`: Loads MediaPipe BlazeFace face detector task from pre-cached `.task` bundle.
+  - `load_silero_vad_model()`: Loads Silero VAD standalone TorchScript JIT model via `torch.jit.load()` with CPU mapping.
+  - `run_model_health_check()`: Runs test inference across all 3 models against sample audio arrays and video frames.
+- Generated 5-second 1280x720 16kHz test fixture video `tests/fixtures/simple_case.mp4`.
+- Created unit test suite `tests/unit/test_model_loading.py` with a strict socket-level network-call-blocking harness (`BlockNetworkCalls`).
+- Verified that all three perception models load and execute inference with zero outbound network calls under test conditions.
+
+**Files Created:**
+- `src/tools/model_loader.py` — Centralized offline perception model loader and health-check module.
+- `tests/fixtures/simple_case.mp4` — Standard 5-second test video fixture with video and 16kHz audio tracks.
+- `tests/unit/test_model_loading.py` — Pytest test suite with network-call-blocking verification harness.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 6 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run python -m src.tools.model_loader` reported all three models healthy:
+  `Faster-Whisper: HEALTHY`, `MediaPipe: HEALTHY`, `Silero VAD: HEALTHY`.
+- `uv run pytest tests/unit/test_model_loading.py -v` passed 5 of 5 tests under active socket-blocking harness.
+- Pass
+---

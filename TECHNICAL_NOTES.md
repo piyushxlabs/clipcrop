@@ -76,3 +76,17 @@ Step 4 — No deviations from spec.
 
 Step 5 — No deviations from spec.
 ---
+
+## Step 6 — Standalone TorchScript JIT VAD Loading & Socket-Level Network Blocker
+**Decision:**
+- Loaded Silero VAD standalone TorchScript JIT model directly via `torch.jit.load(map_location="cpu")` rather than executing `torch.hub.load` through `snakers4_silero-vad_master`.
+- Created a custom `BlockNetworkCalls` test fixture monkeypatching `socket.socket.connect` to systematically prohibit and catch any outbound TCP/UDP network access during model loading and inference tests.
+- Bound Faster-Whisper to `local_files_only=True` and MediaPipe FaceDetector to local `.task` asset path.
+
+**Reason:**
+- The Silero `hubconf.py` script attempts to import `torchaudio`. Loading `silero_vad.jit` directly eliminates unapproved dependencies and preserves the locked manifest in `pyproject.toml`.
+- Provides 100% mechanical verification that no telemetry, license checks, or model weights are fetched from the internet during pipeline execution, strictly satisfying the airgap runtime directives in `AGENT_ORCHESTRATION_BLUEPRINT.md` Section 6 and workspace rules.
+
+**Impact:**
+- Tools implemented in Step 10 (`transcribe_audio`, `detect_speech_pauses`, `track_speaker_position`) can directly consume `load_whisper_model`, `load_silero_vad_model`, and `load_face_detector` from `src.tools.model_loader` with zero risk of runtime egress.
+---
