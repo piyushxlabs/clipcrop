@@ -169,3 +169,21 @@ Step 5 — No deviations from spec.
 **Impact:**
 - In Step 14 (Build Backend API/Server) and Step 15 (Implement Typed Streaming Layer), HTTP/SSE cancel endpoints can invoke `controller.cancel()` knowing execution halts cleanly with automatic filesystem rollback.
 ---
+
+## Step 14 — FastAPI Application Architecture, SSE Wire Streaming, and Deliverable Sandboxing
+**Decision:**
+- Implemented `src/main.py` providing `GET /health`, `POST /runs`, `GET /runs/{run_id}/stream`, `POST /runs/{run_id}/cancel`, `POST /runs/{run_id}/feedback`, and `GET /outputs/{filename}` with FastAPI CORS middleware.
+- In `POST /runs`, enforced strict file validation: filename path traversal sanitization, extension allowlist (`.mp4`, `.mov`, `.mkv`, `.webm`, `.avi`), zero-byte check, and chunked streaming to sandboxed `upload_dir`.
+- Bound `GET /runs/{run_id}/stream` to the pipeline controller, emitting text/event-stream messages (`data-stage-start`, `data-state-update`, `data-run-end`, `error`) formatted for Vercel AI SDK v6 Data Stream consumers.
+- Mounted deliverable serving on `GET /outputs/{filename}` with strict path traversal validation against `CLIPCROP_OUTPUT_DIR`.
+- Implemented `POST /runs/{run_id}/feedback` appending user thumbs-up/down ratings and notes to newline-delimited JSON trace logs in `outputs/traces/`.
+- Created comprehensive unit test suite in `tests/unit/test_api_server.py` with 12 tests covering all endpoints and security safeguards.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 10 Step 14 and `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 2, 2a, and 7a.
+- Connects the async pipeline controller to the HTTP/SSE transport layer while preserving the zero-cloud, sandboxed local architecture.
+
+**Impact:**
+- Ready for Step 15 (Implement the Typed Streaming Layer) where `src/ui/event_types.py` and `src/ui/stream_handler.py` will formalize the typed SSE wire contracts.
+---
+

@@ -411,3 +411,34 @@
 - `uv run pytest tests/ -v` passed all 53 unit and integration tests in 47.73s with 0 failures.
 - Pass
 ---
+
+## Step 14 — Build Backend API/Server
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented FastAPI backend application in `src/main.py` fulfilling Section 10 Step 14:
+  - `GET /health`: Health check endpoint responding 200 with `status="healthy"` and `version="0.1.0"`.
+  - `POST /runs`: Multipart video upload endpoint with filename sanitization, traversal defense, extension validation (`.mp4`, `.mov`, `.mkv`, `.webm`, `.avi`), 0-byte check, chunked sandboxed disk streaming, and session initialization in ephemeral `RUN_REGISTRY`.
+  - `GET /runs/{run_id}/stream`: Persistent Server-Sent Events (SSE) streaming endpoint using `StreamingResponse(media_type="text/event-stream")` emitting wire format messages (`data-stage-start`, `data-state-update`, `data-run-end`, `error`).
+  - `POST /runs/{run_id}/cancel`: Emergency stop endpoint invoking `controller.cancel()` with instant response.
+  - `POST /runs/{run_id}/feedback`: User feedback endpoint recording per-clip rating (`up`/`down`) and optional note, appending structured JSON annotations to local trace logs per Section 7a.
+  - `GET /outputs/{filename}`: Deliverable file download endpoint serving rendered vertical MP4 and CMX 3600 EDL files with directory traversal defense.
+- Configured FastAPI `CORSMiddleware` supporting frontend development server connections (`localhost:5173`).
+- Created comprehensive unit test suite in `tests/unit/test_api_server.py` with 12 tests verifying all endpoints, status codes, upload validation, SSE streaming, cancellation, feedback, and deliverable serving.
+
+**Files Created:**
+- `src/main.py` — FastAPI backend application with REST and SSE endpoints.
+- `tests/unit/test_api_server.py` — 12 unit tests verifying all API endpoints and security defenses.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 14 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_api_server.py -v` passed all 12 tests in 11.48s with 0 failures.
+- `uv run pytest tests/ -v` passed all 65 unit and integration tests across the entire codebase in 55.61s with 0 failures.
+- Pass
+---

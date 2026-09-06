@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 13: Implement Safety Guardrails
+- **Last Completed Step:** Step 14: Build Backend API/Server
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -60,5 +60,13 @@
   - Emergency stop cancellation with `asyncio.Event` checked between stages and candidate segments
   - Multi-tier model fallback support for Faster-Whisper
   - Automated safety guardrails and negative test suite (`tests/integration/test_safety_guardrails.py`)
-- **Pending Next Step:** Step 14: Build Backend API/Server
+  - FastAPI backend application (`src/main.py`)
+  - Health check endpoint `GET /health` responding 200 with service version
+  - Multipart video upload endpoint `POST /runs` with extension allowlist, traversal sanitization, and session registry
+  - Server-Sent Events (SSE) streaming endpoint `GET /runs/{run_id}/stream`
+  - Emergency stop cancellation endpoint `POST /runs/{run_id}/cancel`
+  - Per-clip user feedback endpoint `POST /runs/{run_id}/feedback` with local trace log annotation
+  - Deliverable file download endpoint `GET /outputs/{filename}` with traversal defense
+  - FastAPI backend unit test suite (`tests/unit/test_api_server.py`)
+- **Pending Next Step:** Step 15: Implement the Typed Streaming Layer
 - **Known Issues / Blockers:** None

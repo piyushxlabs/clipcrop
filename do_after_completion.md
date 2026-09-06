@@ -1,62 +1,51 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 13 COMPLETION CHECKLIST
-# Implement Safety Guardrails
+# STEP 14 COMPLETION CHECKLIST
+# Build Backend API/Server
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run safety guardrails test suite
+[ ] Verify the FastAPI application imports cleanly and root endpoints respond:
     ```powershell
-    uv run pytest tests/integration/test_safety_guardrails.py -v
+    uv run python -c "from src.main import app; print(app.title)"
     ```
-    Expected: 12 passed in ~5s with 0 failures.
+    Expected: ClipCrop API
 
-[ ] Run full test suite across all modules
+[ ] Run the API server test suite:
     ```powershell
-    uv run pytest tests/ -v
+    uv run pytest tests/unit/test_api_server.py -v
     ```
-    Expected: 53 passed with 0 failures.
+    Expected: 12 passed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify source overwrite rejection on RenderVerticalClipInput
+[ ] Run the full test regression suite:
     ```powershell
-    uv run python -c "from pydantic import ValidationError; from src.tools.schemas.render_vertical_clip import RenderVerticalClipInput, CropKeyframeModel; kf = [CropKeyframeModel(timestamp_ms=0, x=0, y=0, width=400, height=700)];
-try:
-    RenderVerticalClipInput(segment_id='s1', source_video_path='uploads/test.mp4', segment_start_ms=0, segment_end_ms=1000, crop_keyframes=kf, output_path='uploads/test.mp4')
-    assert False, 'Should have failed'
-except ValidationError as e:
-    print('OVERWRITE_REJECTION_VERIFIED:', e)
-"
+    uv run pytest tests/ -v
     ```
-    Expected: `OVERWRITE_REJECTION_VERIFIED: 1 validation error ... output_path cannot overwrite source video`
-    If wrong: Check `validate_output_not_source` model validator in `src/tools/schemas/render_vertical_clip.py`.
+    Expected: 65 passed in ~55 seconds with 0 failures
+    If wrong: Check error output in test failures and ensure FFmpeg is available on PATH
 
-[ ] Verify path traversal protection
+[ ] Verify server starts up without errors:
     ```powershell
-    uv run python -c "from pydantic import ValidationError; from src.tools.schemas.decode_and_validate_source import DecodeAndValidateSourceInput;
-try:
-    DecodeAndValidateSourceInput(source_path='uploads/../secret.mp4')
-    assert False, 'Should have failed'
-except ValidationError as e:
-    print('TRAVERSAL_REJECTION_VERIFIED:', e)
-"
+    uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
     ```
-    Expected: `TRAVERSAL_REJECTION_VERIFIED: 1 validation error ... must not contain '..' path-traversal sequences`
-    If wrong: Check `validate_no_traversal` in `src/tools/schemas/decode_and_validate_source.py`.
+    Expected: Application startup complete. Uvicorn running on http://127.0.0.1:8000
+    If wrong: Check if port 8000 is occupied or kill conflicting process
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `tests/integration/test_safety_guardrails.py` — 12 negative and structural tests covering all Section 8 prohibitions, Section 9.4 criteria, and Section 9.5 failure simulations.
-[ ] File: `src/tools/schemas/render_vertical_clip.py` — Dual-layer overwrite defense via `model_validator` rejecting `output_path == source_video_path`.
-[ ] File: `src/tools/render_vertical_clip.py` — In-flight partial output unlinking on render failure.
-[ ] File: `src/agents/pipeline_controller.py` — Emergency stop with `asyncio.Event` and automatic filesystem rollback cleanup (`_cleanup_in_flight_outputs`).
-[ ] Feature: Biometric Privacy Structural Lock — Spatial 2D bounding boxes only; zero identity, landmark, or voiceprint fields in schemas.
-[ ] Feature: Ephemeral In-Process State Verification — Zero disk checkpointing or database engines in codebase.
-[ ] Feature: Gate-Bypass Impossibility — Strict precondition checks preventing rendering or exporting for skipped segments.
+[ ] File: `src/main.py` — FastAPI application implementing REST and SSE endpoints (`/health`, `/runs`, `/runs/{id}/stream`, `/runs/{id}/cancel`, `/runs/{id}/feedback`, `/outputs/{filename}`)
+[ ] File: `tests/unit/test_api_server.py` — 12 unit tests covering all endpoints, status codes, upload validation, SSE streaming, cancellation, feedback, and deliverable serving
+[ ] Feature: Multipart upload validation — Enforces file extension allowlist, path traversal protection, zero-byte rejection, and chunked streaming to sandboxed `uploads/`
+[ ] Feature: In-process run registry — Ephemeral dictionary tracking active controllers and source video metadata without persistent databases
+[ ] Feature: Server-Sent Events (SSE) streaming — StreamingResponse emitting real-time stage progress and state transitions formatted for Vercel AI SDK v6 Data Stream consumers
+[ ] Feature: Emergency stop endpoint — `POST /runs/{run_id}/cancel` cleanly triggering controller cancellation and partial deliverable rollback
+[ ] Feature: User feedback trace logging — `POST /runs/{run_id}/feedback` recording ratings and notes to newline-delimited JSON trace files in `outputs/traces/`
+[ ] Feature: Sandboxed deliverable download — `GET /outputs/{filename}` serving rendered clips and EDL files with directory traversal defense
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -64,39 +53,39 @@ except ValidationError as e:
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path tests/integration/test_safety_guardrails.py
+Get-ChildItem -Path src\main.py, tests\unit\test_api_server.py | Select-Object Name, Length
 ```
-✅ Expected: `True`.
-❌ If missing: Check file creation in `tests/integration/`.
+✅ Expected: Both `main.py` and `test_api_server.py` are listed with non-zero byte size
+❌ If missing: Ensure files were saved properly in `src/` and `tests/unit/`
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import pytest, pydantic; print('SAFETY_ENV_OK')"
+uv run python -c "import fastapi, uvicorn, pydantic; print('FastAPI:', fastapi.__version__, 'Pydantic:', pydantic.__version__)"
 ```
-✅ Expected: `SAFETY_ENV_OK`
-❌ If errors: Run `uv sync --extra dev` to reinstall dependencies.
+✅ Expected: FastAPI 0.115.x and Pydantic 2.x versions printed
+❌ If errors: Run `uv sync` to ensure dependencies match `uv.lock`
 
-Test 3 — Safety Guardrails Test Suite:
+Test 3 — Server or Process Start:
 ```powershell
-uv run pytest tests/integration/test_safety_guardrails.py -v
+uv run python -c "from fastapi.testclient import TestClient; from src.main import app; client = TestClient(app); print(client.get('/health').json())"
 ```
-✅ Expected: 12 passed in ~5s.
-❌ If errors: Inspect failing assertion.
+✅ Expected: {'status': 'healthy', 'version': '0.1.0'}
+❌ If errors: Inspect `src/main.py` syntax and route registration
 
-Test 4 — Complete Regression Suite:
+Test 4 — Functional Check:
 ```powershell
-uv run pytest tests/ -v
+uv run pytest tests/unit/test_api_server.py -v
 ```
-✅ Expected: 53 passed across all unit and integration tests.
-❌ If errors: Check failing tests for regressions.
+✅ Expected: All 12 tests pass (test_health, test_post_runs_*, test_stream_run, test_cancel_run, test_feedback, test_get_output_*)
+❌ If wrong: Check test output logs and tracebacks
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
     ```powershell
     Get-Content .gitignore | Select-String "\.env"
     ```
-    ✅ Expected: `.env` appears in the output.
-    ❌ If missing: Add `.env` to `.gitignore` immediately.
+    ✅ Expected: .env appears in the output
+    ❌ If missing: Add `.env` to .gitignore immediately
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 GIT COMMIT
@@ -105,11 +94,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 13: Implement Safety Guardrails — prohibition enforcement, partial output rollback, and negative test suite"
+git commit -m "Step 14: Build Backend API/Server -- FastAPI endpoints, upload sanitization, SSE streaming, and test suite"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 14 until:
+✋ DO NOT proceed to Step 15 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully
