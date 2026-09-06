@@ -153,3 +153,19 @@ Step 5 — No deviations from spec.
 **Impact:**
 - Step 13 (Implement Safety Guardrails) and subsequent backend API/streaming integration (Steps 14–15) have fully validated, deterministic end-to-end pipeline execution and robust regression test coverage.
 ---
+
+## Step 13 — Dual-Layer Overwrite Defense, In-Flight Rollback, and Structural Negative Evals
+**Decision:**
+- Enforced dual-layer output collision defense: added a strict Pydantic `model_validator` in `RenderVerticalClipInput` asserting `Path(output_path).resolve() != Path(source_video_path).resolve()`, supplemented by runtime verification in `_validate_output_sandbox` inside `src/tools/render_vertical_clip.py`.
+- Implemented in-flight partial output rollback cleanup in `src/agents/pipeline_controller.py` (`_cleanup_in_flight_outputs`) and `src/tools/render_vertical_clip.py`. On mid-session user cancellation or render failure, any partially written `.mp4` or `.edl` files are immediately deleted from disk, guaranteeing zero corrupt or incomplete files remain in the output directory.
+- Upgraded the emergency stop mechanism in `PipelineController` to maintain an `asyncio.Event` (`self._cancel_event`), checking cancellation before every stage transition and before dispatching each candidate segment in Stage 4, 6, and 7.
+- Authored a comprehensive negative and structural verification suite in `tests/integration/test_safety_guardrails.py` (12 tests) verifying all 8 Section 8 prohibitions, Section 9.4 invariants, and Section 9.5 failure scenarios.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 8, Section 9.4/9.5, and rules `scope-screening-and-safety-gate-order.md` and `code-level-verification-over-model-discretion.md`.
+- Prevents data loss or source video destruction under erroneous configurations.
+- Guarantees the deliverable contract: only verified, complete, 100% paired deliverables (clip + EDL) are delivered to the user.
+
+**Impact:**
+- In Step 14 (Build Backend API/Server) and Step 15 (Implement Typed Streaming Layer), HTTP/SSE cancel endpoints can invoke `controller.cancel()` knowing execution halts cleanly with automatic filesystem rollback.
+---

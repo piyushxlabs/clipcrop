@@ -3,7 +3,8 @@
 from __future__ import annotations
 
 from typing import Any, Literal
-from pydantic import BaseModel, ConfigDict, Field, field_validator
+from typing_extensions import Self
+from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
 
 from src.tools.schemas.smooth_crop_path import CropKeyframeModel
 
@@ -38,6 +39,13 @@ class RenderVerticalClipInput(BaseModel):
         if not v:
             raise ValueError("crop_keyframes must not be empty.")
         return v
+
+    @model_validator(mode="after")
+    def validate_output_not_source(self) -> Self:
+        from pathlib import Path
+        if Path(self.output_path).resolve() == Path(self.source_video_path).resolve():
+            raise ValueError("output_path cannot overwrite source video")
+        return self
 
 
 class RenderVerticalClipOutput(BaseModel):

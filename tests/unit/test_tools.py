@@ -185,23 +185,26 @@ def test_render_vertical_clip_rejects_source_overwrite() -> None:
     """Assert render_vertical_clip rejects output_path equal to source_video_path."""
     kf = [CropKeyframeModel(timestamp_ms=0, x=100, y=0, width=405, height=720)]
 
-    # Attempting to overwrite source should fail validation or execution
-    inp = RenderVerticalClipInput(
-        segment_id="seg_01",
-        source_video_path="uploads/video.mp4",
-        segment_start_ms=0,
-        segment_end_ms=5000,
-        crop_keyframes=kf,
-        output_width=1080,
-        output_height=1920,
-        output_path="uploads/video.mp4",  # Collision!
-        video_codec="libx264",
-        crf=20,
-        preset="fast",
-    )
+    # 1. Direct sandbox validation check
     from src.tools.render_vertical_clip import _validate_output_sandbox
     with pytest.raises(ValueError, match="must not equal or overwrite source_video_path"):
-        _validate_output_sandbox(inp.output_path, inp.source_video_path, Path("outputs"))
+        _validate_output_sandbox("uploads/video.mp4", "uploads/video.mp4", Path("outputs"))
+
+    # 2. Pydantic model validator check on instantiation
+    with pytest.raises(ValidationError, match="output_path cannot overwrite source video"):
+        RenderVerticalClipInput(
+            segment_id="seg_01",
+            source_video_path="uploads/video.mp4",
+            segment_start_ms=0,
+            segment_end_ms=5000,
+            crop_keyframes=kf,
+            output_width=1080,
+            output_height=1920,
+            output_path="uploads/video.mp4",  # Collision!
+            video_codec="libx264",
+            crf=20,
+            preset="fast",
+        )
 
 
 # ---------------------------------------------------------------------------

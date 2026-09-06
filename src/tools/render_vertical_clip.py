@@ -155,9 +155,20 @@ async def render_vertical_clip(
 
         except Exception as e:
             last_error = str(e)
+            if dest_path.exists():
+                try:
+                    dest_path.unlink()
+                except Exception:
+                    pass
             if attempt == 0:
                 await asyncio.sleep(0.05)
                 continue
+
+    if dest_path.exists():
+        try:
+            dest_path.unlink()
+        except Exception:
+            pass
 
     return RenderVerticalClipOutput(
         success=False,

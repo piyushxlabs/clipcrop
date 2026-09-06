@@ -62,7 +62,7 @@ async def transcribe_audio(
 
     for tier in tiers_to_try:
         try:
-            model = load_whisper_model(config)
+            model = load_whisper_model(config, tier=tier)
             segments, lang = await asyncio.to_thread(
                 _transcribe_sync,
                 model,

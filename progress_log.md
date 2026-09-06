@@ -373,3 +373,41 @@
 - `uv run pytest tests/ -v` passed all 41 unit and integration tests in 40.69s with 0 failures.
 - Pass
 ---
+
+## Step 13 — Implement Safety Guardrails
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented and verified structural enforcement for all Section 8 prohibitions:
+  - Prohibition 1 & 7: Prohibited tools/APIs absent (verified zero social media / publishing tools, zero paid cloud API packages).
+  - Prohibition 2: Source video immutability enforced in state machine (`immutable_after_init`), and output overwrite prevention enforced in both Pydantic schema validation (`model_validator` in `RenderVerticalClipInput`) and tool sandbox checks.
+  - Prohibition 3: Biometric privacy compliance verified (spatial 2D bounding boxes only; zero facial landmarks, 3D meshes, voiceprints, or identity inference in tracking models).
+  - Prohibition 4: Path allowlisting and directory traversal defense verified across all tools and pipeline controller.
+  - Prohibition 5: Ephemeral in-process state verified (zero persistence engines, databases, or SQLite checkpoints in codebase).
+  - Prohibition 6: Gate-bypass impossibility verified (`verify_render_precondition` and `verify_export_precondition` strictly prohibit rendering or exporting for skipped segments).
+- Implemented in-flight partial output rollback cleanup in `src/agents/pipeline_controller.py` (`_cleanup_in_flight_outputs`) and `src/tools/render_vertical_clip.py` ensuring partial or cancelled deliverables are deleted immediately.
+- Enhanced mid-session emergency stop with `asyncio.Event` (`self._cancel_event`) checked before each stage and before dispatching each segment.
+- Added multi-tier model fallback support in `src/tools/model_loader.py` (`tier` parameter for `load_whisper_model`).
+- Created comprehensive negative test suite `tests/integration/test_safety_guardrails.py` covering all 12 safety and failure scenarios from Section 8, 9.4, and 9.5.
+
+**Files Created:**
+- `tests/integration/test_safety_guardrails.py` — 12 comprehensive safety guardrail and failure simulation tests.
+
+**Files Modified:**
+- `src/tools/schemas/render_vertical_clip.py` — Added `model_validator` to `RenderVerticalClipInput` preventing source video overwrite.
+- `src/tools/render_vertical_clip.py` — Added automatic partial file unlinking on render failure or abort.
+- `src/agents/pipeline_controller.py` — Added `asyncio.Event` cancellation, per-segment cancellation checks, and output rollback cleanup.
+- `src/tools/model_loader.py` — Added `tier` parameter to `load_whisper_model`.
+- `src/tools/transcribe_audio.py` — Passed `tier` parameter to `load_whisper_model`.
+- `tests/unit/test_tools.py` — Updated `test_render_vertical_clip_rejects_source_overwrite` to verify both model validation and sandbox validation.
+- `progress_log.md` — Appended Step 13 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/integration/test_safety_guardrails.py -v` passed all 12 tests in 4.77s.
+- `uv run pytest tests/ -v` passed all 53 unit and integration tests in 47.73s with 0 failures.
+- Pass
+---

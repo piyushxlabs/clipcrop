@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 12: Implement the Deterministic Reasoning Loop
+- **Last Completed Step:** Step 13: Implement Safety Guardrails
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -52,5 +52,13 @@
   - End-to-end pipeline execution delivering verified paired deliverables (1080x1920 MP4 + CMX 3600 EDL)
   - Multi-run determinism regression suite proving byte-identical/value-identical candidate scoring, confidence gate, and crop keyframes across runs
   - End-to-end integration test suite (`tests/integration/test_pipeline_e2e.py`) verifying all Section 9.4 offline criteria
-- **Pending Next Step:** Step 13: Implement Safety Guardrails
+  - Structural enforcement of all Section 8 prohibitions (zero network publishing tools, zero billed APIs)
+  - Source video immutability and dual-layer output overwrite protection (Pydantic model validator + tool sandbox)
+  - Biometric privacy enforcement (bounding-box tracking only; zero landmark/mesh/voiceprint templates)
+  - Path traversal and sandbox allowlist enforcement across all tools
+  - In-flight partial output rollback cleanup on cancellation or rendering failure
+  - Emergency stop cancellation with `asyncio.Event` checked between stages and candidate segments
+  - Multi-tier model fallback support for Faster-Whisper
+  - Automated safety guardrails and negative test suite (`tests/integration/test_safety_guardrails.py`)
+- **Pending Next Step:** Step 14: Build Backend API/Server
 - **Known Issues / Blockers:** None

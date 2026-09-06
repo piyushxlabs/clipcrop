@@ -109,18 +109,33 @@ class PipelineController:
         self.state = StateSchema(session_id=self.session_id, config=self.config)
         self.start_time: float = 0.0
         self.cancelled: bool = False
+        self._cancel_event = asyncio.Event()
         self.current_stage: PipelineStage | None = None
         self.executor = executor
         self._owns_executor = False
         self._final_result: dict[str, Any] | None = None
 
     def cancel(self) -> None:
-        """Signal the pipeline controller to cancel between stages."""
+        """Signal the pipeline controller to cancel between stages or segments."""
         self.cancelled = True
+        self._cancel_event.set()
+
+    def _cleanup_in_flight_outputs(self) -> None:
+        """Roll back and delete partially written output files on cancellation or failure."""
+        if not self.config.output_dir.is_dir():
+            return
+        prefix = f"{self.session_id}_"
+        for item in self.config.output_dir.iterdir():
+            if item.is_file() and item.name.startswith(prefix):
+                try:
+                    item.unlink(missing_ok=True)
+                except Exception:
+                    pass
 
     def _check_cancellation(self) -> None:
-        """Check if a cancellation signal has been received."""
-        if self.cancelled:
+        """Check if a cancellation signal has been received and clean up in-flight outputs."""
+        if self.cancelled or self._cancel_event.is_set():
+            self._cleanup_in_flight_outputs()
             raise PermanentFailureError("Pipeline execution was cancelled by user.")
 
     def _check_time_budget(self) -> bool:
@@ -473,6 +488,7 @@ class PipelineController:
         assert self.state.source_video is not None
 
         for cand in self.state.candidate_segments:
+            self._check_cancellation()
             gate = self.state.confidence_gate_results.get(cand.segment_id)
             if not gate or gate.decision != "render":
                 continue
@@ -516,6 +532,12 @@ class PipelineController:
             )
             render_out = await render_vertical_clip(render_in, self.config)
 
+            # Cancellation check after in-flight render call returns
+            if self.cancelled or self._cancel_event.is_set():
+                if out_clip_path.exists():
+                    out_clip_path.unlink(missing_ok=True)
+                self._check_cancellation()
+
             if render_out.success and render_out.output_file_path:
                 clip_ref = FileRef(
                     path=render_out.output_file_path,
@@ -540,6 +562,14 @@ class PipelineController:
                 if asyncio.iscoroutine(export_out):
                     export_out = await export_out
 
+                # Cancellation check after in-flight export call returns
+                if self.cancelled or self._cancel_event.is_set():
+                    if out_clip_path.exists():
+                        out_clip_path.unlink(missing_ok=True)
+                    if out_edl_path.exists():
+                        out_edl_path.unlink(missing_ok=True)
+                    self._check_cancellation()
+
                 if export_out.success and export_out.output_file_path:
                     exp_ref = FileRef(
                         path=export_out.output_file_path,
@@ -549,11 +579,15 @@ class PipelineController:
                     )
                     self.state = apply_state_update(self.state, "crop_path_exports", exp_ref)
                 else:
+                    if out_edl_path.exists():
+                        out_edl_path.unlink(missing_ok=True)
                     self._record_error(
                         PipelineStage.STAGE_7_RENDER_AND_EXPORT.value,
                         f"Export failed for {cand.segment_id}: {export_out.error}",
                     )
             else:
+                if out_clip_path.exists():
+                    out_clip_path.unlink(missing_ok=True)
                 self._record_error(
                     PipelineStage.STAGE_7_RENDER_AND_EXPORT.value,
                     f"Render failed for {cand.segment_id}: {render_out.error}",

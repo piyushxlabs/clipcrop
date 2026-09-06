@@ -19,14 +19,15 @@ from src.config import RuntimeConfig, load_config_from_env
 from src.exceptions import ToolExecutionError
 
 
-def load_whisper_model(config: RuntimeConfig) -> Any:
-    """Load Faster-Whisper base.en model from local models directory.
+def load_whisper_model(config: RuntimeConfig, tier: str = "base.en") -> Any:
+    """Load Faster-Whisper model (base.en or tiny.en) from local models directory.
 
     Guarantees zero network calls by enforcing local_files_only=True.
     """
     from faster_whisper import WhisperModel
 
-    whisper_dir = config.models_dir / "faster-whisper-base.en"
+    folder_name = f"faster-whisper-{tier}" if not tier.startswith("faster-whisper-") else tier
+    whisper_dir = config.models_dir / folder_name
     if not whisper_dir.is_dir():
         raise ToolExecutionError(
             f"Faster-Whisper model directory not found at {whisper_dir}"
