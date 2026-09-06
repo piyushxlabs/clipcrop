@@ -37,6 +37,7 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.agents.pipeline_controller import PipelineController, PipelineStage
 from src.config import RuntimeConfig, load_config_from_env
 from src.exceptions import ClipCropError, PermanentFailureError
+from src.ui.stream_handler import StreamHandler
 
 logger = logging.getLogger("clipcrop.api")
 
@@ -118,6 +119,7 @@ class RunSession:
     event_queue: asyncio.Queue[str] = field(default_factory=asyncio.Queue)
     result: dict[str, Any] | None = None
     error: str | None = None
+    stream_handler: StreamHandler | None = None
 
 
 RUN_REGISTRY: dict[str, RunSession] = {}
@@ -246,10 +248,12 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
         if updates:
             run_config = runtime_config.model_copy(update=updates)
 
+        stream_handler = StreamHandler(run_id=run_id)
         controller = PipelineController(
             config=run_config,
             source_video_path=dest_path,
             session_id=run_id,
+            stream_handler=stream_handler,
         )
 
         session = RunSession(
@@ -257,6 +261,7 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
             controller=controller,
             source_filename=safe_name,
             source_video_path=dest_path,
+            stream_handler=stream_handler,
         )
         RUN_REGISTRY[run_id] = session
 
@@ -280,103 +285,32 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
                 detail=f"Run session '{run_id}' not found.",
             )
 
-        async def sse_event_generator() -> AsyncGenerator[str, None]:
-            """Yield SSE wire format events from pipeline execution."""
-            controller = session.controller
+        handler = session.stream_handler
+        if handler is None:
+            handler = StreamHandler(run_id=run_id)
+            session.stream_handler = handler
+            session.controller.stream_handler = handler
 
-            # Helper to format SSE message
-            def _format_sse(event_data: dict[str, Any]) -> str:
-                return f"data: {json.dumps(event_data)}\n\n"
-
-            # If the session is already completed or failed, emit current state and run-end
-            if session.status in ("completed", "cancelled", "failed"):
-                state_dump = {
-                    "rendered_clips": [c.model_dump() for c in controller.state.rendered_clips],
-                    "crop_path_exports": [e.model_dump() for e in controller.state.crop_path_exports],
-                    "skipped_segments": [s.model_dump() for s in controller.state.skipped_segments],
-                }
-                yield _format_sse({
-                    "type": "data-state-update",
-                    "field": "rendered_clips",
-                    "reducer": "append-only",
-                    "value": state_dump,
-                })
-                reason = "interrupted" if session.status == "cancelled" else ("error" if session.status == "failed" else "success")
-                yield _format_sse({"type": "data-run-end", "reason": reason})
-                return
-
+        # Start execution in background task if not already started or completed
+        if session.status == "created" and session.task is None:
             session.status = "running"
 
-            # Emit initial stage-start
-            yield _format_sse({
-                "type": "data-stage-start",
-                "stage": PipelineStage.STAGE_1_INGEST_AND_VALIDATE.value,
-                "label": "Ingesting and validating source video",
-            })
+            async def _run() -> None:
+                try:
+                    res = await session.controller.execute()
+                    session.result = res
+                    session.status = "completed"
+                except PermanentFailureError as pfe:
+                    session.status = "cancelled" if "cancelled" in str(pfe).lower() else "failed"
+                    session.error = str(pfe)
+                except Exception as e:
+                    session.status = "failed"
+                    session.error = str(e)
 
-            try:
-                result = await controller.execute()
-                session.result = result
-                session.status = "completed"
-
-                # Emit final state updates for deliverables
-                for clip in controller.state.rendered_clips:
-                    yield _format_sse({
-                        "type": "data-state-update",
-                        "field": "rendered_clips",
-                        "reducer": "append-only",
-                        "value": clip.model_dump(),
-                    })
-                for export in controller.state.crop_path_exports:
-                    yield _format_sse({
-                        "type": "data-state-update",
-                        "field": "crop_path_exports",
-                        "reducer": "append-only",
-                        "value": export.model_dump(),
-                    })
-                for skip in controller.state.skipped_segments:
-                    yield _format_sse({
-                        "type": "data-state-update",
-                        "field": "skipped_segments",
-                        "reducer": "append-only",
-                        "value": skip.model_dump(),
-                    })
-
-                yield _format_sse({
-                    "type": "data-run-end",
-                    "reason": "success" if result.get("rendered_count", 0) > 0 else "no_deliverables",
-                    "deliverables_count": len(controller.state.rendered_clips),
-                    "skipped_count": len(controller.state.skipped_segments),
-                })
-
-            except PermanentFailureError as pfe:
-                session.status = "cancelled" if "cancelled" in str(pfe).lower() else "failed"
-                session.error = str(pfe)
-                if "cancelled" in str(pfe).lower():
-                    yield _format_sse({"type": "data-run-end", "reason": "interrupted"})
-                else:
-                    code = "zero_candidates" if "zero_candidates" in str(pfe).lower() else "permanent_failure"
-                    yield _format_sse({
-                        "type": "error",
-                        "code": code,
-                        "message": str(pfe),
-                        "recoverable": False,
-                    })
-                    yield _format_sse({"type": "data-run-end", "reason": "error"})
-
-            except Exception as e:
-                session.status = "failed"
-                session.error = str(e)
-                yield _format_sse({
-                    "type": "error",
-                    "code": "unexpected_error",
-                    "message": str(e),
-                    "recoverable": False,
-                })
-                yield _format_sse({"type": "data-run-end", "reason": "error"})
+            session.task = asyncio.create_task(_run())
 
         return StreamingResponse(
-            sse_event_generator(),
+            handler.event_generator(),
             media_type="text/event-stream",
             headers={
                 "Cache-Control": "no-cache",

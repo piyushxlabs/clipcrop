@@ -187,3 +187,20 @@ Step 5 — No deviations from spec.
 - Ready for Step 15 (Implement the Typed Streaming Layer) where `src/ui/event_types.py` and `src/ui/stream_handler.py` will formalize the typed SSE wire contracts.
 ---
 
+## Step 15 — Typed Server-Sent Events Wire Protocol, Multi-Subscriber Broadcasting, and Lifecycle Tracking
+**Decision:**
+- Implemented `src/ui/event_types.py` defining strict Pydantic V2 models (`model_config = ConfigDict(strict=True)`) for all 7 SSE wire events (`data-stage-start`, `data-stage-progress`, `tool-input-available`, `tool-output-available`, `data-state-update`, `error`, `data-run-end`).
+- Formatted all SSE emissions strictly matching Vercel AI SDK v6 Data Stream wire lines (`data: <json>\n\n`) via `format_sse_event()`, and verified symmetric deserialization via `parse_sse_line()`.
+- Built `StreamHandler` (`src/ui/stream_handler.py`) as an asynchronous event queue broadcaster supporting multiple concurrent subscribers, automatic queue cleanup upon disconnect, and historical replay from an in-memory event buffer so late-joining clients receive the entire sequence of events from run start.
+- Created `ToolTracker` and `track_progress` context managers for declarative emission of `tool-input-available`, `tool-output-available`, and periodic `data-stage-progress` heartbeat events.
+- Wired `StreamHandler` into `PipelineController` and `src/main.py`, emitting live stage transitions, tool executions, and reducer-governed state updates in real time.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 10 Step 15, Section 7, and `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 2a and 3b.
+- Guarantees strict ordering and 1:1 synchronization between backend state mutations and frontend UI stream consumers.
+
+**Impact:**
+- The frontend in Step 17 (`frontend/src/App.tsx` and components) can directly bind to typed SSE events from `GET /runs/{run_id}/stream` using AI SDK v6 or standard EventSource without any custom protocol translation.
+---
+
+

@@ -1,21 +1,21 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 14 COMPLETION CHECKLIST
-# Build Backend API/Server
+# STEP 15 COMPLETION CHECKLIST
+# Implement the Typed Streaming Layer
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Verify the FastAPI application imports cleanly and root endpoints respond:
+[ ] Verify event types and StreamHandler import cleanly:
     ```powershell
-    uv run python -c "from src.main import app; print(app.title)"
+    uv run python -c "from src.ui import StreamHandler, format_sse_event, parse_sse_line, STAGE_LABELS; print('Stream layer loaded:', len(STAGE_LABELS), 'stages mapped')"
     ```
-    Expected: ClipCrop API
+    Expected: Stream layer loaded: 8 stages mapped
 
-[ ] Run the API server test suite:
+[ ] Run the streaming layer unit test suite:
     ```powershell
-    uv run pytest tests/unit/test_api_server.py -v
+    uv run pytest tests/unit/test_streaming_layer.py -v
     ```
-    Expected: 12 passed
+    Expected: 6 passed
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
@@ -24,28 +24,27 @@
     ```powershell
     uv run pytest tests/ -v
     ```
-    Expected: 65 passed in ~55 seconds with 0 failures
-    If wrong: Check error output in test failures and ensure FFmpeg is available on PATH
+    Expected: 71 passed in ~64 seconds with 0 failures
+    If wrong: Inspect test failures and verify model cache / ffmpeg on PATH
 
-[ ] Verify server starts up without errors:
+[ ] Verify live SSE stream emission against the simple case video:
     ```powershell
-    uv run uvicorn src.main:app --host 127.0.0.1 --port 8000
+    uv run python -c "from src.ui.event_types import *; import asyncio; from httpx import ASGITransport, AsyncClient; from src.main import app; async def test(): transport = ASGITransport(app=app); ac = AsyncClient(transport=transport, base_url='http://test'); res = await ac.post('/runs', files={'file': ('simple.mp4', open('tests/fixtures/simple_case.mp4', 'rb'), 'video/mp4')}); run_id = res.json()['run_id']; async with ac.stream('GET', f'/runs/{run_id}/stream') as s: async for l in s.aiter_lines(): p = parse_sse_line(l); (p and print(p.type, getattr(p, 'stage', ''), getattr(p, 'reason', ''))); (p and p.type == 'data-run-end' and break); await ac.aclose(); asyncio.run(test())"
     ```
-    Expected: Application startup complete. Uvicorn running on http://127.0.0.1:8000
-    If wrong: Check if port 8000 is occupied or kill conflicting process
+    Expected: Displays stream events from `data-stage-start` through `data-run-end success`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/main.py` — FastAPI application implementing REST and SSE endpoints (`/health`, `/runs`, `/runs/{id}/stream`, `/runs/{id}/cancel`, `/runs/{id}/feedback`, `/outputs/{filename}`)
-[ ] File: `tests/unit/test_api_server.py` — 12 unit tests covering all endpoints, status codes, upload validation, SSE streaming, cancellation, feedback, and deliverable serving
-[ ] Feature: Multipart upload validation — Enforces file extension allowlist, path traversal protection, zero-byte rejection, and chunked streaming to sandboxed `uploads/`
-[ ] Feature: In-process run registry — Ephemeral dictionary tracking active controllers and source video metadata without persistent databases
-[ ] Feature: Server-Sent Events (SSE) streaming — StreamingResponse emitting real-time stage progress and state transitions formatted for Vercel AI SDK v6 Data Stream consumers
-[ ] Feature: Emergency stop endpoint — `POST /runs/{run_id}/cancel` cleanly triggering controller cancellation and partial deliverable rollback
-[ ] Feature: User feedback trace logging — `POST /runs/{run_id}/feedback` recording ratings and notes to newline-delimited JSON trace files in `outputs/traces/`
-[ ] Feature: Sandboxed deliverable download — `GET /outputs/{filename}` serving rendered clips and EDL files with directory traversal defense
+[ ] File: `src/ui/event_types.py` — Strict Pydantic V2 models for all 7 SSE wire event types (`data-stage-start`, `data-stage-progress`, `tool-input-available`, `tool-output-available`, `data-state-update`, `error`, `data-run-end`), canonical `STAGE_LABELS`, and wire format serializers (`format_sse_event`, `parse_sse_line`)
+[ ] File: `src/ui/stream_handler.py` — Asynchronous multi-subscriber event broadcaster (`StreamHandler`), tool execution wrapper (`ToolTracker`), and periodic heartbeat context manager (`track_progress`)
+[ ] File: `tests/unit/test_streaming_layer.py` — 6 unit and integration tests verifying schema validation, pub/sub broadcasting, historical replay, and full SSE stream reception
+[ ] File: `src/ui/__init__.py` — Exported all public models, serializers, and StreamHandler
+[ ] Feature: Live Stage Transitions — Emits `data-stage-start` at the beginning of each of the 8 pipeline stages
+[ ] Feature: Tool Lifecycle Observability — Emits `tool-input-available` and `tool-output-available` around every local tool invocation
+[ ] Feature: State Mutation Streaming — Emits `data-state-update` with declared reducer semantics (`immutable-after-init`, `append-only`, `merge-by-key`, `last-write-wins`) on every state write
+[ ] Feature: Late-Joining Replay — Replays all past events from memory buffer to clients connecting after run start
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -53,31 +52,31 @@
 
 Test 1 — Files Exist:
 ```powershell
-Get-ChildItem -Path src\main.py, tests\unit\test_api_server.py | Select-Object Name, Length
+Get-ChildItem -Path src\ui\event_types.py, src\ui\stream_handler.py, tests\unit\test_streaming_layer.py | Select-Object Name, Length
 ```
-✅ Expected: Both `main.py` and `test_api_server.py` are listed with non-zero byte size
-❌ If missing: Ensure files were saved properly in `src/` and `tests/unit/`
+✅ Expected: All three files exist with non-zero byte length
+❌ If missing: Ensure files were created properly in `src/ui/` and `tests/unit/`
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import fastapi, uvicorn, pydantic; print('FastAPI:', fastapi.__version__, 'Pydantic:', pydantic.__version__)"
+uv run python -c "import pydantic, httpx; print('Pydantic:', pydantic.__version__, 'HTTPX:', httpx.__version__)"
 ```
-✅ Expected: FastAPI 0.115.x and Pydantic 2.x versions printed
-❌ If errors: Run `uv sync` to ensure dependencies match `uv.lock`
+✅ Expected: Pydantic 2.x and HTTPX versions printed
+❌ If errors: Run `uv sync`
 
-Test 3 — Server or Process Start:
+Test 3 — Streaming Layer Unit Tests:
 ```powershell
-uv run python -c "from fastapi.testclient import TestClient; from src.main import app; client = TestClient(app); print(client.get('/health').json())"
+uv run pytest tests/unit/test_streaming_layer.py -v
 ```
-✅ Expected: {'status': 'healthy', 'version': '0.1.0'}
-❌ If errors: Inspect `src/main.py` syntax and route registration
+✅ Expected: 6 passed (test_event_types_validation_and_serialization, test_stream_handler_broadcast_and_history_replay, test_stream_handler_tool_tracker, test_stream_handler_track_progress_heartbeat, test_streaming_layer_simple_case_receives_all_spec_events_in_order, test_streaming_layer_zero_candidates_emits_error_and_run_end)
+❌ If errors: Inspect pytest error tracebacks
 
-Test 4 — Functional Check:
+Test 4 — Full Regression Suite:
 ```powershell
-uv run pytest tests/unit/test_api_server.py -v
+uv run pytest tests/ -v
 ```
-✅ Expected: All 12 tests pass (test_health, test_post_runs_*, test_stream_run, test_cancel_run, test_feedback, test_get_output_*)
-❌ If wrong: Check test output logs and tracebacks
+✅ Expected: All 71 tests pass in ~64s with 0 failures
+❌ If wrong: Check individual failing test modules
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -94,11 +93,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 14: Build Backend API/Server -- FastAPI endpoints, upload sanitization, SSE streaming, and test suite"
+git commit -m "Step 15: Implement the Typed Streaming Layer -- SSE event types, StreamHandler broadcaster, and integration tests"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 15 until:
+✋ DO NOT proceed to Step 17 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

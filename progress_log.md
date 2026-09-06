@@ -442,3 +442,53 @@
 - `uv run pytest tests/ -v` passed all 65 unit and integration tests across the entire codebase in 55.61s with 0 failures.
 - Pass
 ---
+
+## Step 15 — Implement the Typed Streaming Layer
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented `src/ui/event_types.py` with strict Pydantic V2 models (`model_config = ConfigDict(strict=True)`) and wire format serializers for all 7 SSE event types per `INTERFACE_OBSERVABILITY_SYSTEM.md` Section 2a and `AGENT_MASTER_PLAN.md` Section 7:
+  - `DataStageStartEvent`: `type="data-stage-start"`, `stage`, `label`
+  - `DataStageProgressEvent`: `type="data-stage-progress"`, `stage`, `detail` (elapsed ms heartbeat)
+  - `ToolInputAvailableEvent`: `type="tool-input-available"`, `toolCallId`, `toolName`, `input`
+  - `ToolOutputAvailableEvent`: `type="tool-output-available"`, `toolCallId`, `toolName`, `output`
+  - `DataStateUpdateEvent`: `type="data-state-update"`, `field`, `reducer`, `key`, `value`
+  - `ErrorEvent`: `type="error"`, `code`, `message`, `recoverable=False`
+  - `DataRunEndEvent`: `type="data-run-end"`, `reason`, `deliverables_count`, `skipped_count`
+  - `format_sse_event` and `parse_sse_line` wire serializers conforming to Vercel AI SDK v6 Data Stream Protocol (`data: <json>\n\n`).
+  - Canonical `STAGE_LABELS` mapping all 8 pipeline stages to user-facing labels.
+- Implemented `src/ui/stream_handler.py`:
+  - `StreamHandler`: Publisher-subscriber broadcast engine with multi-subscriber queue management, late-joining historical replay, and generator yielding `text/event-stream` chunks.
+  - `ToolTracker`: Context manager wrapping tool calls to emit `tool-input-available` and `tool-output-available`.
+  - `track_progress`: Periodic async heartbeat context manager emitting elapsed time progress events.
+- Integrated `StreamHandler` into `PipelineController` (`src/agents/pipeline_controller.py`) and FastAPI (`src/main.py`):
+  - Emits `data-stage-start` at the beginning of each of the 8 stages.
+  - Emits `data-stage-progress` during perception model inference.
+  - Emits `tool-input-available` and `tool-output-available` around every local tool invocation (`decode_and_validate_source`, `transcribe_audio`, `detect_speech_pauses`, `track_speaker_position`, `smooth_crop_path`, `render_vertical_clip`, `export_crop_path_data`).
+  - Emits `data-state-update` on every typed state write mirroring the declared reducer (`immutable-after-init`, `append-only`, `merge-by-key`, `last-write-wins`).
+  - Emits `error` on permanent failure or exception.
+  - Emits `data-run-end` upon pipeline termination (`success`, `no_deliverables`, `interrupted`, or `error`).
+- Created comprehensive unit and integration test suite in `tests/unit/test_streaming_layer.py` (6 tests).
+- Verified full end-to-end SSE connection test against `simple_case.mp4` confirming all event types arrive in documented order.
+
+**Files Created:**
+- `src/ui/event_types.py` — Typed Pydantic V2 SSE event models, stage labels, and wire format serializers.
+- `src/ui/stream_handler.py` — Multi-subscriber SSE stream broadcaster, tool tracker, and progress heartbeat manager.
+- `tests/unit/test_streaming_layer.py` — Unit and integration test suite (6 tests) for typed streaming layer.
+
+**Files Modified:**
+- `src/ui/__init__.py` — Exported event models, serializers, and StreamHandler.
+- `src/agents/pipeline_controller.py` — Integrated `StreamHandler` emitting stage transitions, tool lifecycles, and reducer updates.
+- `src/main.py` — Connected `StreamHandler` into `create_run` and `stream_run` routes.
+- `progress_log.md` — Appended Step 15 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_streaming_layer.py -v` passed all 6 tests in 12.92s.
+- `uv run pytest tests/ -v` passed all 71 unit and integration tests across the entire codebase in 64.09s with 0 failures.
+- Pass
+---
+

@@ -68,5 +68,13 @@
   - Per-clip user feedback endpoint `POST /runs/{run_id}/feedback` with local trace log annotation
   - Deliverable file download endpoint `GET /outputs/{filename}` with traversal defense
   - FastAPI backend unit test suite (`tests/unit/test_api_server.py`)
-- **Pending Next Step:** Step 15: Implement the Typed Streaming Layer
+  - Typed Server-Sent Events (SSE) models (`src/ui/event_types.py`) for all 7 spec event types (`data-stage-start`, `data-stage-progress`, `tool-input-available`, `tool-output-available`, `data-state-update`, `error`, `data-run-end`)
+  - Vercel AI SDK v6 Data Stream wire format serializers (`format_sse_event`, `parse_sse_line`)
+  - Canonical stage-to-label mapping dictionary (`STAGE_LABELS`)
+  - Asynchronous event broadcaster and queue manager (`src/ui/stream_handler.py`) with historical replay for late subscribers
+  - Tool execution context manager (`ToolTracker`) and periodic progress heartbeat context manager (`track_progress`)
+  - Pipeline controller integration emitting stage start, stage progress, tool input/output, and reducer state update events in real time
+  - Typed streaming layer unit and integration test suite (`tests/unit/test_streaming_layer.py`)
+- **Last Completed Step:** Step 15: Implement the Typed Streaming Layer
+- **Pending Next Step:** Step 17: Build the Interface Layer & Generative UI Components (Step 16 Intentionally Absent)
 - **Known Issues / Blockers:** None

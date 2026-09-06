@@ -11,6 +11,7 @@ from __future__ import annotations
 import argparse
 import asyncio
 import concurrent.futures
+import contextlib
 import enum
 import os
 import sys
@@ -21,6 +22,8 @@ from typing import Any
 
 from src.config import RuntimeConfig, load_config_from_env
 from src.exceptions import ClipCropError, PermanentFailureError, StateValidationError
+from src.ui.event_types import STAGE_LABELS
+from src.ui.stream_handler import StreamHandler
 from src.state.reducers import apply_state_update
 from src.state.schema import (
     BoundingBox,
@@ -101,6 +104,7 @@ class PipelineController:
         dry_run: bool = False,
         executor: concurrent.futures.Executor | None = None,
         session_id: str | None = None,
+        stream_handler: StreamHandler | None = None,
     ) -> None:
         self.config = config or load_config_from_env()
         self.source_video_path = Path(source_video_path).resolve() if source_video_path else None
@@ -114,6 +118,7 @@ class PipelineController:
         self.executor = executor
         self._owns_executor = False
         self._final_result: dict[str, Any] | None = None
+        self.stream_handler = stream_handler
 
     def cancel(self) -> None:
         """Signal the pipeline controller to cancel between stages or segments."""
@@ -220,20 +225,65 @@ class PipelineController:
             for stage in PIPELINE_STAGES_ORDER:
                 self._check_cancellation()
                 self.current_stage = stage
+                if self.stream_handler is not None:
+                    label = STAGE_LABELS.get(stage.value, stage.value)
+                    await self.stream_handler.emit_stage_start(stage.value, label)
+
                 await self._execute_stage(stage)
 
                 # Time budget circuit breaker check between stages
                 if stage != PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE and self._check_time_budget():
-                    self._record_error(
-                        stage.value,
-                        f"Time budget of {self.config.time_budget_seconds}s exhausted after stage '{stage.value}'.",
-                    )
+                    msg = f"Time budget of {self.config.time_budget_seconds}s exhausted after stage '{stage.value}'."
+                    self._record_error(stage.value, msg)
+                    if self.stream_handler is not None:
+                        await self.stream_handler.emit_error("time_budget_exhausted", msg, recoverable=False)
                     break
 
             if self.current_stage != PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE:
+                if self.stream_handler is not None:
+                    label = STAGE_LABELS.get(
+                        PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value,
+                        "Finalizing summary and deliverables",
+                    )
+                    await self.stream_handler.emit_stage_start(
+                        PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value, label
+                    )
                 await self._execute_stage_8_aggregate_and_terminate()
 
-            return self._final_result or {"status": "completed"}
+            result = self._final_result or {"status": "completed"}
+            if self.stream_handler is not None:
+                rendered_count = len(self.state.rendered_clips)
+                skipped_count = len(self.state.skipped_segments)
+                reason = "success" if rendered_count > 0 else "no_deliverables"
+                await self.stream_handler.emit_run_end(
+                    reason=reason,
+                    deliverables_count=rendered_count,
+                    skipped_count=skipped_count,
+                )
+            return result
+        except PermanentFailureError as pfe:
+            if self.stream_handler is not None:
+                pfe_str = str(pfe).lower()
+                if "cancelled" in pfe_str:
+                    code = "cancelled"
+                    reason = "interrupted"
+                elif "zero_candidates" in pfe_str:
+                    code = "zero_candidates"
+                    reason = "error"
+                elif "ingest failed" in pfe_str or "invalid" in pfe_str or "missing required" in pfe_str:
+                    code = "invalid_source"
+                    reason = "error"
+                else:
+                    code = "pipeline_error"
+                    reason = "error"
+                await self.stream_handler.emit_error(code, str(pfe), recoverable=False)
+                await self.stream_handler.emit_run_end(reason=reason)
+            raise
+        except Exception as exc:
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_error("pipeline_error", str(exc), recoverable=False)
+                await self.stream_handler.emit_run_end(reason="error")
+            raise
         finally:
             if self._owns_executor and self.executor is not None:
                 self.executor.shutdown(wait=False)
@@ -263,7 +313,19 @@ class PipelineController:
         """Stage 1: Ingest & Validate via decode_and_validate_source tool."""
         assert self.source_video_path is not None
         inp = DecodeAndValidateSourceInput(source_path=str(self.source_video_path))
+        tool_call_id = f"call_ingest_{self.session_id[:8]}"
+
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_tool_input(
+                tool_call_id, "decode_and_validate_source", inp.model_dump()
+            )
+
         out = await decode_and_validate_source(inp, self.config)
+
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_tool_output(
+                tool_call_id, "decode_and_validate_source", out.model_dump()
+            )
 
         if not out.success:
             self._record_error(
@@ -298,6 +360,10 @@ class PipelineController:
             file_size_bytes=file_size,
         )
         self.state = apply_state_update(self.state, "source_video", file_ref)
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_state_update(
+                "source_video", "immutable-after-init", file_ref.model_dump()
+            )
 
     async def _execute_stage_2_transcribe_and_segment(self) -> None:
         """Stage 2: Transcribe & Segment concurrently via transcribe_audio and detect_speech_pauses."""
@@ -306,11 +372,27 @@ class PipelineController:
 
         t_inp = TranscribeAudioInput(audio_source_path=src_path)
         v_inp = DetectSpeechPausesInput(audio_source_path=src_path)
+        call_id_t = f"call_transcribe_{self.session_id[:8]}"
+        call_id_v = f"call_vad_{self.session_id[:8]}"
 
-        t_res, v_res = await asyncio.gather(
-            transcribe_audio(t_inp, self.config),
-            detect_speech_pauses(v_inp, self.config),
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_tool_input(call_id_t, "transcribe_audio", t_inp.model_dump())
+            await self.stream_handler.emit_tool_input(call_id_v, "detect_speech_pauses", v_inp.model_dump())
+
+        progress_cm = (
+            self.stream_handler.track_progress(PipelineStage.STAGE_2_TRANSCRIBE_AND_SEGMENT.value, interval_seconds=1.0)
+            if self.stream_handler is not None
+            else contextlib.nullcontext()
         )
+        async with progress_cm:
+            t_res, v_res = await asyncio.gather(
+                transcribe_audio(t_inp, self.config),
+                detect_speech_pauses(v_inp, self.config),
+            )
+
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_tool_output(call_id_t, "transcribe_audio", t_res.model_dump())
+            await self.stream_handler.emit_tool_output(call_id_v, "detect_speech_pauses", v_res.model_dump())
 
         t_segments = [
             TranscriptSegment(start_ms=s.start_ms, end_ms=s.end_ms, text=s.text)
@@ -323,6 +405,13 @@ class PipelineController:
 
         self.state = apply_state_update(self.state, "transcript_segments", t_segments)
         self.state = apply_state_update(self.state, "vad_segments", v_spans)
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_state_update(
+                "transcript_segments", "append-only", [s.model_dump() for s in t_segments]
+            )
+            await self.stream_handler.emit_state_update(
+                "vad_segments", "append-only", [s.model_dump() for s in v_spans]
+            )
 
     async def _execute_stage_3_score_candidates(self) -> None:
         """Stage 3: Score Candidates via deterministic heuristic candidate_scorer."""
@@ -340,11 +429,27 @@ class PipelineController:
         # Enforce hard cap CLIPCROP_MAX_CANDIDATES
         capped = candidates[: self.config.max_candidates]
         self.state = apply_state_update(self.state, "candidate_segments", capped)
+        if self.stream_handler is not None:
+            await self.stream_handler.emit_state_update(
+                "candidate_segments", "last-write-wins", [c.model_dump() for c in capped]
+            )
 
     async def _execute_stage_4_track_speaker_position(self) -> None:
         model_asset = self.config.models_dir / "blaze_face_short_range.task"
         if not model_asset.exists():
             model_asset = self.config.models_dir / "blaze_face_short_range.tflite"
+
+        if self.stream_handler is not None:
+            for cand in self.state.candidate_segments:
+                await self.stream_handler.emit_tool_input(
+                    f"call_track_{cand.segment_id}",
+                    "track_speaker_position",
+                    {
+                        "segment_id": cand.segment_id,
+                        "segment_start_ms": cand.start_ms,
+                        "segment_end_ms": cand.end_ms,
+                    },
+                )
 
         tasks = [
             track_speaker_position(
@@ -361,9 +466,16 @@ class PipelineController:
             for cand in self.state.candidate_segments
         ]
 
-        results = await asyncio.gather(*tasks, return_exceptions=True)
+        progress_cm = (
+            self.stream_handler.track_progress(PipelineStage.STAGE_4_TRACK_SPEAKER_POSITION.value, interval_seconds=1.0)
+            if self.stream_handler is not None
+            else contextlib.nullcontext()
+        )
+        async with progress_cm:
+            results = await asyncio.gather(*tasks, return_exceptions=True)
 
         for cand, res in zip(self.state.candidate_segments, results):
+            call_id = f"call_track_{cand.segment_id}"
             if isinstance(res, Exception) or not getattr(res, "success", False):
                 err_msg = str(res) if isinstance(res, Exception) else (res.error or "Tracking failed.")
                 tr = TrackingResult(
@@ -376,6 +488,10 @@ class PipelineController:
                     PipelineStage.STAGE_4_TRACK_SPEAKER_POSITION.value,
                     f"Tracking failed for {cand.segment_id}: {err_msg}",
                 )
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_tool_output(
+                        call_id, "track_speaker_position", {"success": False, "error": err_msg}
+                    )
             else:
                 positions = [
                     FramePosition(
@@ -396,8 +512,16 @@ class PipelineController:
                     per_frame_positions=positions,
                     segment_confidence=res.segment_confidence,
                 )
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_tool_output(
+                        call_id, "track_speaker_position", res.model_dump()
+                    )
 
             self.state = apply_state_update(self.state, "tracking_results", tr, key=cand.segment_id)
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_state_update(
+                    "tracking_results", "merge-by-key", tr.model_dump(), key=cand.segment_id
+                )
 
     async def _execute_stage_5_confidence_gate(self) -> None:
         """Stage 5: Confidence Gate evaluating render-vs-skip for each candidate segment."""
@@ -412,6 +536,10 @@ class PipelineController:
                 decision,
                 key=cand.segment_id,
             )
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_state_update(
+                    "confidence_gate_results", "merge-by-key", decision.model_dump(), key=cand.segment_id
+                )
 
             if decision.decision == "skip":
                 skip_rec = SkipRecord(
@@ -422,6 +550,10 @@ class PipelineController:
                     timestamp_ms=int((time.monotonic() - self.start_time) * 1000) if self.start_time > 0 else 0,
                 )
                 self.state = apply_state_update(self.state, "skipped_segments", skip_rec)
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_state_update(
+                        "skipped_segments", "append-only", skip_rec.model_dump()
+                    )
 
     async def _execute_stage_6_smooth_crop_path(self) -> None:
         """Stage 6: Smooth Crop Path generating 9:16 crop keyframes for render-approved segments."""
@@ -466,6 +598,18 @@ class PipelineController:
             )
             res = smooth_crop_path(smooth_in, self.config)
 
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_tool_input(
+                    f"call_smooth_{cand.segment_id}",
+                    "smooth_crop_path",
+                    smooth_in.model_dump(),
+                )
+                await self.stream_handler.emit_tool_output(
+                    f"call_smooth_{cand.segment_id}",
+                    "smooth_crop_path",
+                    res.model_dump(),
+                )
+
             if res.success:
                 kfs = [
                     CropKeyframe(
@@ -482,6 +626,10 @@ class PipelineController:
                 sp = SmoothedPath(segment_id=cand.segment_id, success=False, error=res.error)
 
             self.state = apply_state_update(self.state, "crop_paths", sp, key=cand.segment_id)
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_state_update(
+                    "crop_paths", "merge-by-key", sp.model_dump(), key=cand.segment_id
+                )
 
     async def _execute_stage_7_render_and_export(self) -> None:
         """Stage 7: Render 9:16 vertical clip and immediately export paired crop path data."""
@@ -506,6 +654,10 @@ class PipelineController:
                     timestamp_ms=int((time.monotonic() - self.start_time) * 1000),
                 )
                 self.state = apply_state_update(self.state, "skipped_segments", skip_rec)
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_state_update(
+                        "skipped_segments", "append-only", skip_rec.model_dump()
+                    )
                 continue
 
             out_clip_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_vertical.mp4"
@@ -530,7 +682,19 @@ class PipelineController:
                 crf=20,
                 preset="fast",
             )
+
+            call_id_render = f"call_render_{cand.segment_id}"
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_tool_input(
+                    call_id_render, "render_vertical_clip", render_in.model_dump()
+                )
+
             render_out = await render_vertical_clip(render_in, self.config)
+
+            if self.stream_handler is not None:
+                await self.stream_handler.emit_tool_output(
+                    call_id_render, "render_vertical_clip", render_out.model_dump()
+                )
 
             # Cancellation check after in-flight render call returns
             if self.cancelled or self._cancel_event.is_set():
@@ -549,6 +713,10 @@ class PipelineController:
                     file_size_bytes=render_out.file_size_bytes,
                 )
                 self.state = apply_state_update(self.state, "rendered_clips", clip_ref)
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_state_update(
+                        "rendered_clips", "append-only", clip_ref.model_dump()
+                    )
 
                 # Deliverable Contract: Immediately serialize crop path data for this segment
                 out_edl_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_crop_path.edl"
@@ -558,9 +726,21 @@ class PipelineController:
                     output_path=str(out_edl_path),
                     format="edl",
                 )
+
+                call_id_export = f"call_export_{cand.segment_id}"
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_tool_input(
+                        call_id_export, "export_crop_path_data", export_in.model_dump()
+                    )
+
                 export_out = export_crop_path_data(export_in, self.config)
                 if asyncio.iscoroutine(export_out):
                     export_out = await export_out
+
+                if self.stream_handler is not None:
+                    await self.stream_handler.emit_tool_output(
+                        call_id_export, "export_crop_path_data", export_out.model_dump()
+                    )
 
                 # Cancellation check after in-flight export call returns
                 if self.cancelled or self._cancel_event.is_set():
@@ -578,6 +758,10 @@ class PipelineController:
                         keyframe_count=export_out.keyframe_count,
                     )
                     self.state = apply_state_update(self.state, "crop_path_exports", exp_ref)
+                    if self.stream_handler is not None:
+                        await self.stream_handler.emit_state_update(
+                            "crop_path_exports", "append-only", exp_ref.model_dump()
+                        )
                 else:
                     if out_edl_path.exists():
                         out_edl_path.unlink(missing_ok=True)
