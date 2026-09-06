@@ -1,7 +1,7 @@
 docs/
 .docs/
-.agents/
-agents/
+/.agents/
+/agents/
 
 # Environment and secrets
 .env

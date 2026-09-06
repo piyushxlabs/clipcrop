@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 4: Scaffold Directory Structure
+- **Last Completed Step:** Step 5: Initialize the Pipeline Controller Module
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -18,5 +18,8 @@
   - Coding Assistant Context document (`CLAUDE.md`) codifying invariants, boundaries, and anti-patterns
   - Full project directory scaffold (`src/agents`, `src/tools/schemas`, `src/state`, `src/telemetry`, `src/ui`, `frontend/src/components`, `frontend/src/sse`, `tests/mocks`, `tests/unit`, `tests/integration`, `tests/fixtures`)
   - Root project overview and architecture guide (`README.md`)
-- **Pending Next Step:** Step 5: Initialize the Pipeline Controller Module
+  - Domain exception hierarchy (`src/exceptions.py` rooted at `ClipCropError`)
+  - Runtime configuration system (`src/config.py` with strict Pydantic V2 `RuntimeConfig`)
+  - Deterministic 8-stage pipeline controller skeleton (`src/agents/pipeline_controller.py` with `--dry-run` validation)
+- **Pending Next Step:** Step 6: Configure Local Models
 - **Known Issues / Blockers:** None

@@ -59,3 +59,20 @@ Step 3 — No deviations from spec.
 
 Step 4 — No deviations from spec.
 ---
+
+## Step 5 — Pipeline Controller Skeleton & Deterministic Failure Semantics
+**Decision:**
+- Structured `PipelineController` in `src/agents/pipeline_controller.py` as a forward-only async controller strictly implementing the 8 stages defined in `AGENT_LOGIC_SPEC.md` Section 2.
+- Created `ClipCropError` hierarchy (`ToolExecutionError`, `StateValidationError`, `PermanentFailureError`) in `src/exceptions.py`.
+- Built `RuntimeConfig` in `src/config.py` using strict, frozen Pydantic V2 models (`model_config = ConfigDict(strict=True, frozen=True)`) with field validators enforcing threshold and candidate bounds.
+- Enforced input verification: missing source path triggers a clean `ClipCropError` rather than crashing during `--dry-run` or execution.
+
+**Reason:**
+- Fulfills the verification requirement of Step 5 from `AGENT_MASTER_PLAN.md` Section 4/10.
+- Implements the non-generative, deterministic state machine architecture mandated across all five foundational specification documents.
+
+**Impact:**
+- Modules in subsequent steps (model configuration in Step 6, state schema in Step 7, and tool integrations in Step 10) have an explicit runtime configuration, error handling hierarchy, and stage execution pipeline to plug into.
+
+Step 5 — No deviations from spec.
+---

@@ -152,3 +152,35 @@
 - Verified all Python package markers resolve cleanly via `uv run python`.
 - Pass
 ---
+
+## Step 5 — Initialize the Pipeline Controller Module
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Defined domain exception hierarchy in `src/exceptions.py` rooted at `ClipCropError`: `ToolExecutionError`, `StateValidationError`, and `PermanentFailureError`.
+- Implemented `RuntimeConfig` in `src/config.py` using Pydantic V2 with strict type validation (`model_config = ConfigDict(strict=True, frozen=True)`), parsing all 9 required `CLIPCROP_*` environment keys with bound validators for `confidence_threshold` [0.0, 1.0], `max_candidates` [1, 10], and `time_budget_seconds` [≥1].
+- Implemented the deterministic 8-stage forward-only controller skeleton in `src/agents/pipeline_controller.py`:
+  - `PipelineStage` enum declaring all 8 sequential stages (`ingest_and_validate`, `transcribe_and_segment`, `score_candidates`, `track_speaker_position`, `confidence_gate`, `smooth_crop_path`, `render_and_export`, `aggregate_and_terminate`).
+  - `PipelineController` class with `execute()` async runner and dry-run verification mode.
+  - Implemented input verification: raising `ClipCropError` when source video path is missing or invalid.
+  - CLI argument parsing support (`--input`, `--dry-run`).
+- Verified zero import-time side effects and verified that running `--dry-run` with no input cleanly raises `ClipCropError`.
+
+**Files Created:**
+- `src/exceptions.py` — Custom domain exception hierarchy.
+- `src/config.py` — Pydantic V2 runtime configuration model and environment loader.
+- `src/agents/pipeline_controller.py` — 8-stage forward-only pipeline controller skeleton.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 5 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run python -c "import src.config, src.exceptions, src.agents.pipeline_controller"` exited with code 0 (zero import-time side effects).
+- `uv run python -m src.agents.pipeline_controller --dry-run` cleanly raised `ClipCropError: No source video input provided for pipeline execution.` with non-zero exit code.
+- Programmatic test verified `ClipCropError` is caught and `len(PIPELINE_STAGES_ORDER) == 8`.
+- Pass
+---
