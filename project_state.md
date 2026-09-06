@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 11: Wire the Fixed Stage Sequence
+- **Last Completed Step:** Step 12: Implement the Deterministic Reasoning Loop
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -49,5 +49,8 @@
   - Mid-session cancellation support (`controller.cancel()`) halting cleanly between stages
   - 90-second run-wide time budget circuit breaker check
   - Unit and structural test suite verifying stage sequence and boundaries (`tests/unit/test_pipeline_controller.py`)
-- **Pending Next Step:** Step 12: Implement the Deterministic Reasoning Loop
+  - End-to-end pipeline execution delivering verified paired deliverables (1080x1920 MP4 + CMX 3600 EDL)
+  - Multi-run determinism regression suite proving byte-identical/value-identical candidate scoring, confidence gate, and crop keyframes across runs
+  - End-to-end integration test suite (`tests/integration/test_pipeline_e2e.py`) verifying all Section 9.4 offline criteria
+- **Pending Next Step:** Step 13: Implement Safety Guardrails
 - **Known Issues / Blockers:** None

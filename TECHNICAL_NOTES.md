@@ -139,3 +139,17 @@ Step 5 — No deviations from spec.
 **Impact:**
 - In Step 12 (Implement the Deterministic Reasoning Loop), the pipeline controller can execute end-to-end against real fixtures, evaluating confidence gating and termination criteria.
 ---
+
+## Step 12 — Audiovisual Fixture Standardization, Determinism Verification, and Windows Multi-Processing
+**Decision:**
+- Standardized the real talking-head audiovisual fixture (`tests/fixtures/simple_case.mp4`) with an identifiable centered facial subject and clear spoken speech audio track (16kHz PCM), establishing a permanent ground-truth fixture for offline integration and determinism testing.
+- Implemented multi-run determinism regression testing (`test_pipeline_determinism_regression` in `tests/integration/test_pipeline_e2e.py`) verifying that running the pipeline multiple times over identical media produces strictly identical candidate segments, confidence gate decisions, and smoothed crop keyframes.
+- Updated `_track_frames_process_worker` in `src/tools/track_speaker_position.py` to accept serialized `config_dict` (via `config.model_dump()`) and re-validate inside the worker process, ensuring seamless cross-process boundary serialization under Windows.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 9.4 and `docs/AGENT_LOGIC_SPEC.md` Section 1 requiring zero-hallucination, 100% deterministic camera motion and reproducible segment scoring on CPU-only local execution.
+- Ensures integration tests catch any nondeterministic drift or race conditions in perception model execution and multiprocessing on Windows.
+
+**Impact:**
+- Step 13 (Implement Safety Guardrails) and subsequent backend API/streaming integration (Steps 14–15) have fully validated, deterministic end-to-end pipeline execution and robust regression test coverage.
+---

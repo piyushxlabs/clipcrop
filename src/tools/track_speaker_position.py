@@ -174,7 +174,7 @@ def _track_frames_sync(
 
 
 def _track_frames_process_worker(
-    models_dir: str,
+    config_dict: dict[str, Any],
     frames: list[np.ndarray],
     timestamps: list[int],
     frame_sample_stride: int,
@@ -186,7 +186,7 @@ def _track_frames_process_worker(
     from src.config import RuntimeConfig
     from src.tools.model_loader import load_face_detector
 
-    cfg = RuntimeConfig(models_dir=Path(models_dir))
+    cfg = RuntimeConfig.model_validate(config_dict)
     detector = load_face_detector(cfg)
     positions, conf = _track_frames_sync(
         detector,
@@ -228,7 +228,7 @@ async def track_speaker_position(
                 raw_positions, conf = await loop.run_in_executor(
                     executor,
                     _track_frames_process_worker,
-                    str(config.models_dir),
+                    config.model_dump(),
                     frames,
                     timestamps,
                     input_data.frame_sample_stride,

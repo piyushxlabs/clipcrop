@@ -335,5 +335,41 @@
 - `uv run python -m src.agents.pipeline_controller --input tests/fixtures/simple_case.mp4 --dry-run` passed with all 8 stages verified.
 - `uv run pytest tests/unit/test_pipeline_controller.py -v` passed all 8 tests in 3.47s.
 - `uv run pytest tests/unit/ -v` passed all 36 tests across model loading, reducers, tools, and pipeline controller in 11.84s.
+---
+
+## Step 12 — Implement the Deterministic Reasoning Loop
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented real audiovisual test fixture in `tests/fixtures/simple_case.mp4` containing 1280x720 video with a detected face and real 16kHz speech audio (~6.8s).
+- Verified end-to-end deterministic pipeline execution against `simple_case.mp4` delivering paired 9:16 vertical MP4 clip (`1080x1920` with audio) and paired CMX 3600 Edit Decision List (`.edl` with SMPTE timecodes and crop keyframes).
+- Implemented end-to-end integration test suite in `tests/integration/test_pipeline_e2e.py` covering all Section 9.4 "Agent Is Working" offline criteria:
+  - `test_simple_case_end_to_end_real_pipeline`: Full 8-stage execution producing verified paired deliverables (1080x1920 MP4 + CMX 3600 EDL) in ~8.3s.
+  - `test_pipeline_determinism_regression`: Two independent runs over the exact same source produce byte-identical/value-identical candidate segments, confidence gate decisions, and crop keyframes.
+  - `test_silent_audio_edge_case_zero_candidates`: Silence-over-guessing policy terminating cleanly via `PermanentFailureError("zero_candidates")` when audio contains no speech.
+  - `test_low_confidence_skip_branch`: Candidate segment with no detectable speaker face evaluated at confidence 0.0 < 0.65 threshold is skipped with zero clips or EDL files rendered/exported.
+  - `test_circuit_breaker_time_budget`: Micro time budget (0.001s) immediately triggers time budget circuit breaker halting execution gracefully without hang.
+- Fixed `_track_frames_process_worker` to safely accept serialized `RuntimeConfig` dict for reliable multi-processing under Windows.
+
+**Files Created:**
+- `tests/integration/test_pipeline_e2e.py` — End-to-end integration test suite verifying determinism, silence-over-guessing, confidence gating, time budgeting, and paired deliverables.
+
+**Files Modified:**
+- `tests/fixtures/simple_case.mp4` — Regenerated with real talking-head face and clear spoken speech audio track.
+- `src/tools/track_speaker_position.py` — Updated process pool worker to deserialize `RuntimeConfig` from dict representation.
+- `progress_log.md` — Appended Step 12 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/integration/test_pipeline_e2e.py -v` passed all 5 integration tests in 38.75s:
+  - `test_simple_case_end_to_end_real_pipeline`: PASSED
+  - `test_pipeline_determinism_regression`: PASSED
+  - `test_silent_audio_edge_case_zero_candidates`: PASSED
+  - `test_low_confidence_skip_branch`: PASSED
+  - `test_circuit_breaker_time_budget`: PASSED
+- `uv run pytest tests/ -v` passed all 41 unit and integration tests in 40.69s with 0 failures.
 - Pass
 ---
