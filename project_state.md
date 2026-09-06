@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 6: Configure Local Models
+- **Last Completed Step:** Step 7: Implement Typed State Schema & Reducers
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -24,5 +24,12 @@
   - Offline perception model loader and health-check system (`src/tools/model_loader.py`)
   - Simple Case test video fixture (`tests/fixtures/simple_case.mp4`)
   - Socket-level network-call-blocking test harness and model loading test suite (`tests/unit/test_model_loading.py`)
-- **Pending Next Step:** Step 7: Implement Typed State Schema & Reducers
+  - Central type-safe in-process state machine (`src/state/schema.py` with 13 locked fields)
+  - 12 strict Pydantic V2 domain models (`FileRef`, `TranscriptSegment`, `SpeechSpan`, `CandidateSegment`, `BoundingBox`, `FramePosition`, `TrackingResult`, `GateDecision`, `CropKeyframe`, `SmoothedPath`, `SkipRecord`, `ErrorRecord`)
+  - Direct state assignment prohibition on `StateSchema` raising `StateValidationError`
+  - 4 locked deterministic state reducers (`immutable_after_init`, `append_only`, `merge_by_key`, `last_write_wins` with candidate cap enforcement)
+  - Central state mutation dispatcher (`apply_state_update`)
+  - Pipeline precondition verifiers (`verify_render_precondition`, `verify_export_precondition`)
+  - Unit test suite verifying reducer invariants and state protections (`tests/unit/test_reducers.py`)
+- **Pending Next Step:** Step 10: Register Tools (Steps 8 & 9 are intentionally absent per spec)
 - **Known Issues / Blockers:** None

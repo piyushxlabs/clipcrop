@@ -1,47 +1,53 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 6 COMPLETION CHECKLIST
-# Configure Local Models
+# STEP 7 COMPLETION CHECKLIST
+# Implement Typed State Schema & Reducers
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run the offline model health-check CLI
+[ ] Run unit tests for StateSchema and reducers
     ```powershell
-    uv run python -m src.tools.model_loader
+    uv run pytest tests/unit/test_reducers.py -v
     ```
-    Expected: Reports all three models healthy:
-    `Faster-Whisper: HEALTHY`, `MediaPipe: HEALTHY`, `Silero VAD: HEALTHY`.
+    Expected: 8 passed in <1s with 0 warnings.
 
-[ ] Run the model loading unit tests with network-blocking harness
+[ ] Run full unit test suite
     ```powershell
-    uv run pytest tests/unit/test_model_loading.py -v
+    uv run pytest tests/unit/ -v
     ```
-    Expected: 5 passed in <10s with zero network calls.
+    Expected: 13 passed in <8s.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify existence of test fixture video
+[ ] Verify direct mutation protection raises StateValidationError
     ```powershell
-    Test-Path tests/fixtures/simple_case.mp4
+    uv run python -c "from src.state import StateSchema; from src.config import load_config_from_env; from src.exceptions import StateValidationError; s = StateSchema(session_id='test', config=load_config_from_env());
+try:
+    s.session_id = 'mutated'
+    print('FAIL: Mutation allowed')
+except StateValidationError as e:
+    print('PASS: Mutation blocked:', e)
+"
     ```
-    Expected: `True`
+    Expected: `PASS: Mutation blocked: Direct assignment to field 'session_id' on StateSchema is prohibited. All state mutations must route through reducer functions in src.state.reducers.`
 
-[ ] Verify offline model loading directly via python import
+[ ] Verify state update routing via apply_state_update
     ```powershell
-    uv run python -c "from src.tools.model_loader import load_whisper_model, load_face_detector, load_silero_vad_model; from src.config import load_config_from_env; cfg = load_config_from_env(); print('LOADERS_READY')"
+    uv run python -c "from src.state import StateSchema, FileRef, apply_state_update; from src.config import load_config_from_env; s = StateSchema(session_id='test', config=load_config_from_env()); s = apply_state_update(s, 'source_video', FileRef(path='A:/test.mp4')); print('UPDATED_SOURCE:', s.source_video.path)"
     ```
-    Expected: `LOADERS_READY`
+    Expected: `UPDATED_SOURCE: A:/test.mp4`
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/tools/model_loader.py` — Centralized offline perception model loader and health-check system.
-[ ] File: `tests/fixtures/simple_case.mp4` — Standard 5-second 1280x720 16kHz test fixture video.
-[ ] File: `tests/unit/test_model_loading.py` — Pytest test suite with socket-level network-call-blocking verification harness.
-[ ] Feature: Offline Model Loaders — `load_whisper_model`, `load_face_detector`, and `load_silero_vad_model` strictly loading from local paths.
-[ ] Feature: Zero-Network Guarantee — Socket-level monkeypatching verifying zero outbound network calls during perception inference.
+[ ] File: `src/state/schema.py` — Central StateSchema with 13 locked fields and 12 supporting Pydantic V2 domain models.
+[ ] File: `src/state/reducers.py` — 4 locked state reducers (`immutable_after_init`, `append_only`, `merge_by_key`, `last_write_wins`), `apply_state_update` dispatcher, and precondition verifiers.
+[ ] File: `src/state/__init__.py` — Package export interface for state models, reducers, and precondition checkers.
+[ ] File: `tests/unit/test_reducers.py` — Unit test suite verifying reducer invariants, candidate capping, and direct mutation protection.
+[ ] Feature: Immutability Protection — Prohibits direct attribute assignment on StateSchema, enforcing mutation strictly through reducers.
+[ ] Feature: Gating Preconditions — `verify_render_precondition` and `verify_export_precondition` enforcing render gates and paired deliverables.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -49,31 +55,31 @@
 
 Test 1 — Files Exist:
 ```powershell
-Test-Path src/tools/model_loader.py, tests/fixtures/simple_case.mp4, tests/unit/test_model_loading.py
+Test-Path src/state/schema.py, src/state/reducers.py, tests/unit/test_reducers.py
 ```
 ✅ Expected: `True` for all 3 files.
-❌ If missing: Check file generation in `src/tools/`, `tests/fixtures/`, and `tests/unit/`.
+❌ If missing: Check file creation in `src/state/` and `tests/unit/`.
 
-Test 2 — Environment / Dependencies:
+Test 2 — Reducers Unit Test Suite:
 ```powershell
-uv run python -c "import faster_whisper, mediapipe, torch; print('PERCEPTION_LIBS_OK')"
+uv run pytest tests/unit/test_reducers.py -v
 ```
-✅ Expected: `PERCEPTION_LIBS_OK`
-❌ If errors: Ensure `.venv` has all dependencies installed.
+✅ Expected: 8 passed in <1s.
+❌ If errors: Inspect reducer function signatures and Pydantic model configurations.
 
-Test 3 — Model Health Check:
+Test 3 — Full Unit Test Suite:
 ```powershell
-uv run python -m src.tools.model_loader
+uv run pytest tests/unit/ -v
 ```
-✅ Expected: `[SUCCESS] All three local perception models are healthy`
-❌ If errors: Check that model files exist in `models/`.
+✅ Expected: 13 passed in <8s.
+❌ If errors: Verify no regressions in `test_model_loading.py`.
 
-Test 4 — Functional Network-Blocked Test Suite:
+Test 4 — State Schema Field Count Verification:
 ```powershell
-uv run pytest tests/unit/test_model_loading.py -v
+uv run python -c "from src.state import StateSchema; fields = list(StateSchema.model_fields.keys()); assert len(fields) == 13; print('13_FIELDS_OK:', fields)"
 ```
-✅ Expected: 5 passed.
-❌ If wrong: Check `BlockNetworkCalls` fixture and model asset paths.
+✅ Expected: `13_FIELDS_OK: ['session_id', 'source_video', 'transcript_segments', 'vad_segments', 'candidate_segments', 'tracking_results', 'confidence_gate_results', 'crop_paths', 'rendered_clips', 'crop_path_exports', 'skipped_segments', 'error_logs', 'config']`
+❌ If wrong: Compare fields with AGENT_ORCHESTRATION_BLUEPRINT.md Section 3.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore
@@ -90,11 +96,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 6: Configure Local Models — implemented model loaders, simple_case fixture, and network-blocked test harness"
+git commit -m "Step 7: Implement Typed State Schema & Reducers — implemented 13-field StateSchema, 4 reducers, and unit test suite"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 7 until:
+✋ DO NOT proceed to Step 10 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

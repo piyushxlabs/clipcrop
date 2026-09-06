@@ -216,3 +216,34 @@
 - `uv run pytest tests/unit/test_model_loading.py -v` passed 5 of 5 tests under active socket-blocking harness.
 - Pass
 ---
+
+## Step 7 — Implement Typed State Schema & Reducers
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Defined strict Pydantic V2 models for all domain entities in `src/state/schema.py`: `FileRef`, `TranscriptSegment`, `SpeechSpan`, `CandidateSegment`, `BoundingBox`, `FramePosition`, `TrackingResult`, `GateDecision`, `CropKeyframe`, `SmoothedPath`, `SkipRecord`, and `ErrorRecord`.
+- Implemented `StateSchema` with all 13 locked state fields per `AGENT_ORCHESTRATION_BLUEPRINT.md` Section 3 (`session_id`, `source_video`, `transcript_segments`, `vad_segments`, `candidate_segments`, `tracking_results`, `confidence_gate_results`, `crop_paths`, `rendered_clips`, `crop_path_exports`, `skipped_segments`, `error_logs`, `config`).
+- Enforced zero direct field assignment on `StateSchema` via `__setattr__` guard raising `StateValidationError`.
+- Implemented the 4 locked state reducers in `src/state/reducers.py`: `immutable_after_init`, `append_only`, `merge_by_key`, and `last_write_wins` (with `CLIPCROP_MAX_CANDIDATES = 10` cap enforcement).
+- Implemented `apply_state_update` dispatcher routing state updates strictly through declared reducers.
+- Implemented precondition verifiers: `verify_render_precondition` and `verify_export_precondition`.
+- Created comprehensive unit test suite in `tests/unit/test_reducers.py` verifying all reducer invariants, direct-assignment protection, and precondition gating.
+
+**Files Created:**
+- `src/state/schema.py` — Central typed StateSchema and 12 supporting domain Pydantic V2 models.
+- `src/state/reducers.py` — 4 locked state reducers, update dispatcher, and pipeline precondition verifiers.
+- `tests/unit/test_reducers.py` — Unit test suite verifying reducer invariants and state protections.
+
+**Files Modified:**
+- `src/state/__init__.py` — Exported StateSchema, sub-models, reducers, and precondition checkers.
+- `progress_log.md` — Appended Step 7 completion details.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_reducers.py -v` passed all 8 tests in 0.15s with 0 warnings.
+- `uv run pytest tests/unit/ -v` passed all 13 tests across the entire unit test suite.
+- Pass
+---

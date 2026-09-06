@@ -90,3 +90,20 @@ Step 5 — No deviations from spec.
 **Impact:**
 - Tools implemented in Step 10 (`transcribe_audio`, `detect_speech_pauses`, `track_speaker_position`) can directly consume `load_whisper_model`, `load_silero_vad_model`, and `load_face_detector` from `src.tools.model_loader` with zero risk of runtime egress.
 ---
+
+## Step 7 — Direct-Mutation Protection on StateSchema & Reducer Container Immutability
+**Decision:**
+- Enforced direct attribute assignment prohibition on `StateSchema` after initialization by intercepting `__setattr__` to raise `StateValidationError`, requiring all mutations to route through `apply_state_update()`.
+- Built `append_only` and `merge_by_key` reducers to return fresh/shallow-copied containers rather than in-place mutations, guaranteeing that external callers cannot mutate internal state collections via references.
+- Bound `last_write_wins` on `candidate_segments` to strictly enforce the `CLIPCROP_MAX_CANDIDATES = 10` hard cap.
+- Implemented precondition verification helpers (`verify_render_precondition`, `verify_export_precondition`) enforcing that low-confidence segments cannot proceed to smoothing/rendering/exporting and that crop path exports require pre-existing rendered clips.
+
+**Reason:**
+- Fulfills rule `state-invariants-and-tool-preconditions.md` ("zero direct field assignments on `StateSchema`") and `AGENT_ORCHESTRATION_BLUEPRINT.md` Section 3.
+- Prevents subtle race conditions or state corruption when per-segment operations fan out across concurrent workers.
+- Guarantees the Deliverable Contract (rendered 9:16 vertical clips strictly paired 1:1 with timeline crop-path exports) cannot be violated.
+
+**Impact:**
+- In Step 10 (Register Tools) and Step 11 (Wire the Fixed Stage Sequence), tools and the pipeline controller cannot bypass reducers or corrupt state invariants.
+- Guaranteed paired deliverables and render gating are enforced before tools are called.
+---
