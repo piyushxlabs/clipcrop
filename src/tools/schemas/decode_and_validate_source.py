@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -19,7 +20,8 @@ class DecodeAndValidateSourceInput(BaseModel):
     @field_validator("source_path")
     @classmethod
     def validate_no_traversal(cls, v: str) -> str:
-        if ".." in v:
+        path_obj = Path(v)
+        if any(part == ".." for part in path_obj.parts):
             raise ValueError("source_path must not contain '..' path-traversal sequences.")
         return v
 

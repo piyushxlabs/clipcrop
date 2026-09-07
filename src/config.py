@@ -52,10 +52,10 @@ class RuntimeConfig(BaseModel):
         le=10,
         description="Maximum number of candidate segments fanned out per run (hard cap: 10).",
     )
-    time_budget_seconds: int = Field(
-        default=90,
-        ge=1,
-        description="Total wall-clock time budget in seconds for the entire pipeline run (default: 90).",
+    time_budget_seconds: float = Field(
+        default=90.0,
+        ge=0.0,
+        description="Total wall-clock time budget in seconds for the entire pipeline run (default: 90.0).",
     )
     trace_log_dir: Path = Field(
         ...,
@@ -78,9 +78,9 @@ class RuntimeConfig(BaseModel):
 
     @field_validator("time_budget_seconds")
     @classmethod
-    def validate_time_budget(cls, v: int) -> int:
-        if v < 1:
-            raise StateValidationError(f"time_budget_seconds must be >= 1, got {v}")
+    def validate_time_budget(cls, v: float) -> float:
+        if v < 0.0:
+            raise StateValidationError(f"time_budget_seconds must be >= 0.0, got {v}")
         return v
 
 
@@ -117,7 +117,7 @@ def load_config_from_env(env_file_path: Path | None = None) -> RuntimeConfig:
     try:
         raw_confidence = float(get_var("CLIPCROP_CONFIDENCE_THRESHOLD", "0.65"))
         raw_max_candidates = int(get_var("CLIPCROP_MAX_CANDIDATES", "10"))
-        raw_time_budget = int(get_var("CLIPCROP_TIME_BUDGET_SECONDS", "90"))
+        raw_time_budget = float(get_var("CLIPCROP_TIME_BUDGET_SECONDS", "90"))
 
         return RuntimeConfig(
             upload_dir=Path(get_var("CLIPCROP_UPLOAD_DIR")).resolve(),

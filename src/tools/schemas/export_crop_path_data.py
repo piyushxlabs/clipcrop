@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -24,7 +25,7 @@ class ExportCropPathDataInput(BaseModel):
     @field_validator("output_path")
     @classmethod
     def validate_no_traversal(cls, v: str) -> str:
-        if ".." in v:
+        if any(part == ".." for part in Path(v).parts):
             raise ValueError("output_path must not contain '..' path-traversal sequences.")
         return v
 

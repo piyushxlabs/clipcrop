@@ -300,3 +300,39 @@ Step 5 — No deviations from spec.
 **Impact:**
 - ClipCrop implementation is complete across all 21 steps defined in `docs/AGENT_MASTER_PLAN.md`. The project is verified, functional, and ready for local production use.
 ---
+
+## Step 22 — Auto-Generated Subtitles (.SRT) & Smart Peak Thumbnail Extraction
+**Decision:**
+- Implemented `export_subtitles` in `src/tools/export_subtitles.py` using pure Python standard library: converts Whisper transcript segments overlapping the candidate segment window into relative SubRip timecodes (`HH:MM:SS,mmm --> HH:MM:SS,mmm`) with sequential 1-based indexing.
+- Wired subtitle export directly into Stage 7 of `src/agents/pipeline_controller.py` as companion auxiliary deliverable files (`_subtitles.srt` and `_crop_path.srt`), preserving the strict Stage 7 tool access matrix and StateSchema immutability invariants without adding extraneous entries to `crop_path_exports`.
+- Implemented smart peak thumbnail extraction in Stage 7: scores tracking frames by MediaPipe face `detection_score` combined with a proximity penalty to the segment midpoint, selecting the highest-scoring candidate frame, and dispatches a single-frame extraction (`ffmpeg -ss {rel_sec} -i {vertical_mp4} -vframes 1 -q:v 2 {thumb_path}`) via `run_async_subprocess`.
+- Bound `GET /outputs/{filename}` in `src/main.py` to serve `.jpg`/`.jpeg` as `image/jpeg` and `.srt` as `text/plain`.
+- Enhanced `ClipResultsGrid.tsx` with dynamic `poster={thumbUrl}` on the HTML5 `<video>` element and a `.SRT` download button in a responsive 4-column NLE deliverable grid.
+
+**Reason:**
+- Enhances deliverable completeness for content creators without violating airgap or zero-cost constraints.
+- Subtitle generation requires zero additional perception inference since Whisper transcripts are already captured at Stage 2.
+- Smart thumbnail selection prioritizes clear, centered face frames over naive 0s frames (which often show awkward cuts or blinks).
+- Non-destructive auxiliary export preserves all 13 locked StateSchema fields, 4 reducers, and stage invariants.
+
+**Impact:**
+- Content creators receive instant, synchronized captions and preview posters along with the reframed vertical video and NLE timeline files.
+---
+## Step 23 — Hormozi-Style Kinetic Captions, Windows FFmpeg Subtitle Escaping, and Master Creator Pack Bundling
+**Decision:**
+- Implemented kinetic ASS subtitle generation with active word highlighting using standard ASS override tags (`{\c&H0000FFFF&}` for active word, `{\c&H00FFFFFF&}` for baseline words, bold font, thick shadow, safe bottom margin).
+- Escaped Windows filesystem paths for FFmpeg subtitle filter: colon in drive letters is escaped as `\\:` (e.g. `A\\:/Projects/...`) and backslashes converted to forward slashes.
+- Implemented a defensive single-retry fallback in `render_vertical_clip`: if rendering with burned-in subtitles fails (e.g. due to system libass absence or font issue), the tool automatically retries rendering clean vertical video without subtitles.
+- Implemented 100% offline, zero-cloud viral metadata generator: parses transcript into opening hooks, generates 3 title variants, and maps keyword content to 5 curated hashtags.
+- Implemented master ZIP creator pack bundling using Python's standard library `zipfile`, packaging `.mp4`, `.edl`, `.xml`, `.json`, `.srt`, `.jpg`, and formatted `README_METADATA.txt`.
+- Enhanced `frontend/src/components/ClipResultsGrid.tsx` with poster thumbnail display, viral hook pill, copy title & tags button, and master `[📦 Download Complete Creator Pack (.ZIP)]` button.
+
+**Reason:**
+- Preserves $0.00 cost and zero-network execution constraints while dramatically expanding utility for social media creators.
+- Defensive fallback ensures subtitle burning never causes video rendering to fail.
+- Offline metadata generation adheres strictly to zero-network execution rules.
+- 1-click ZIP creator bundle provides an all-in-one deliverable containing both social-ready video and professional NLE timeline files.
+
+**Impact:**
+- Users can immediately export burned-caption vertical shorts, preview with peak cover art, copy viral metadata to clipboard, or download complete ZIP packages for DaVinci Resolve, Premiere Pro, or Final Cut Pro.
+---

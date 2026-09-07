@@ -1,13 +1,16 @@
-import React, { useState } from "react";
-import { FileRef, SmoothedPath } from "../types/events";
+import React, { useEffect, useState } from "react";
+import { FileRef, SmoothedPath, GateDecision, TrackingResult } from "../types/events";
 import { CropPathChart } from "./CropPathChart";
 
 interface ClipResultsGridProps {
   renderedClips: FileRef[];
   cropPathExports: FileRef[];
   cropPaths: Record<string, SmoothedPath>;
+  confidenceGateResults?: Record<string, GateDecision>;
+  trackingResults?: Record<string, TrackingResult>;
   onSubmitFeedback: (segmentId: string, rating: "up" | "down", note?: string) => void;
   apiBaseUrl?: string;
+  runStatus?: string;
 }
 
 interface FeedbackState {
@@ -21,11 +24,16 @@ export const ClipResultsGrid: React.FC<ClipResultsGridProps> = ({
   renderedClips,
   cropPathExports,
   cropPaths,
+  confidenceGateResults,
+  trackingResults,
   onSubmitFeedback,
   apiBaseUrl = "",
+  runStatus,
 }) => {
   const [activeViewMode, setActiveViewMode] = useState<Record<string, "video" | "cropPath">>({});
   const [feedbackMap, setFeedbackMap] = useState<Record<string, FeedbackState>>({});
+  const [metadataMap, setMetadataMap] = useState<Record<string, any>>({});
+  const [copiedSegId, setCopiedSegId] = useState<string | null>(null);
 
   // Ensure pairing: only render clips that have corresponding crop path exports
   const pairedClips = renderedClips.filter((clip) => {
@@ -33,7 +41,50 @@ export const ClipResultsGrid: React.FC<ClipResultsGridProps> = ({
     return cropPathExports.some((exp) => exp.segment_id === clip.segment_id);
   });
 
+  useEffect(() => {
+    pairedClips.forEach((clip) => {
+      const segId = clip.segment_id;
+      if (!segId) return;
+      const clipFilename = clip.path.split(/[/\\]/).pop() || "";
+      const metaFilename = clipFilename.replace(/_vertical\.mp4$/i, "_metadata.json");
+      fetch(`${apiBaseUrl}/outputs/${metaFilename}`)
+        .then((res) => (res.ok ? res.json() : null))
+        .then((data) => {
+          if (data) {
+            setMetadataMap((prev) => ({ ...prev, [segId]: data }));
+          }
+        })
+        .catch(() => {});
+    });
+  }, [pairedClips, apiBaseUrl]);
+
+  const handleCopyTitleAndTags = (segId: string, meta: any) => {
+    const title = meta?.titles?.[0] || meta?.hook || "Check out this clip!";
+    const tags = (meta?.hashtags || []).join(" ");
+    const textToCopy = `${title}\n\n${tags}`;
+    navigator.clipboard.writeText(textToCopy);
+    setCopiedSegId(segId);
+    setTimeout(() => setCopiedSegId(null), 2000);
+  };
+
   if (pairedClips.length === 0) {
+    if (runStatus === "completed") {
+      return (
+        <div id="no-clips-empty-state" className="p-6 bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800/80 text-center space-y-2 shadow-xl">
+          <div className="w-10 h-10 mx-auto rounded-full bg-amber-500/10 border border-amber-500/20 flex items-center justify-center text-amber-400">
+            <svg className="w-5 h-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z" />
+            </svg>
+          </div>
+          <h4 className="text-sm font-semibold text-slate-200">
+            Run Completed — All candidate segments skipped due to low tracking confidence.
+          </h4>
+          <p className="text-xs text-slate-400 max-w-md mx-auto">
+            Try adjusting threshold or uploading clear talking-head footage.
+          </p>
+        </div>
+      );
+    }
     return null;
   }
 
@@ -87,8 +138,20 @@ export const ClipResultsGrid: React.FC<ClipResultsGridProps> = ({
           const viewMode = activeViewMode[segId] || "video";
           const feedback = feedbackMap[segId] || { rating: null, note: "", isSubmitted: false, isExpandedNote: false };
 
+          const gate = confidenceGateResults?.[segId];
+          const tracking = trackingResults?.[segId];
+          const confidenceScore =
+            (clip as unknown as { tracking_confidence?: number }).tracking_confidence ??
+            gate?.tracking_confidence ??
+            tracking?.segment_confidence ??
+            1.0;
+
           const clipFilename = clip.path.split(/[/\\]/).pop() || "clip.mp4";
           const clipUrl = `${apiBaseUrl}/outputs/${clipFilename}`;
+          const thumbUrl = `${apiBaseUrl}/outputs/${clipFilename.replace(/_vertical\.mp4$/i, "_thumbnail.jpg")}`;
+          const meta = metadataMap[segId];
+          const zipFilename = clipFilename.replace(/_vertical\.mp4$/i, "_complete_pack.zip");
+          const zipUrl = `${apiBaseUrl}/outputs/${zipFilename}`;
 
           const durationStr = clip.duration_seconds ? `${clip.duration_seconds.toFixed(1)}s` : "—";
           const sizeStr = clip.file_size_bytes
@@ -136,6 +199,7 @@ export const ClipResultsGrid: React.FC<ClipResultsGridProps> = ({
                     controls
                     playsInline
                     preload="metadata"
+                    poster={thumbUrl}
                     className="w-full h-full object-contain"
                     src={clipUrl}
                   >
@@ -150,50 +214,98 @@ export const ClipResultsGrid: React.FC<ClipResultsGridProps> = ({
 
               {/* Action Buttons & Downloads */}
               <div className="p-4 space-y-3 bg-slate-900/90 flex-1 flex flex-col justify-between">
-                <div className="space-y-2">
-                  {/* Download Clip Button */}
+                <div className="space-y-2.5">
+                  {/* Master ZIP Download Button */}
                   <a
-                    id={`download-clip-${segId}`}
-                    href={clipUrl}
-                    download={clipFilename}
-                    className="w-full flex items-center justify-center space-x-2 py-2 px-3 rounded-lg bg-indigo-600 hover:bg-indigo-500 text-white text-xs font-semibold shadow-md shadow-indigo-600/20 transition-all cursor-pointer"
+                    id={`download-zip-${segId}`}
+                    href={zipUrl}
+                    download={zipFilename}
+                    className="w-full flex items-center justify-center space-x-2 py-2.5 px-3 rounded-lg bg-gradient-to-r from-emerald-600 via-teal-600 to-emerald-600 hover:from-emerald-500 hover:to-teal-500 text-white text-xs font-bold shadow-lg shadow-emerald-950/40 border border-emerald-400/40 transition-all cursor-pointer"
+                    title="Download complete creator pack containing vertical MP4, EDL, XML, JSON, SRT, thumbnail, and metadata"
                   >
-                    <svg className="w-4 h-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                      <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M4 16v1a3 3 0 003 3h10a3 3 0 003-3v-1m-4-4l-4 4m0 0l-4-4m4 4V4" />
-                    </svg>
-                    <span>Download Clip (.mp4)</span>
+                    <span>📦 Download Complete Creator Pack (.ZIP)</span>
                   </a>
 
-                  {/* NLE Download Buttons */}
-                  {primaryExport && (
-                    <div className="grid grid-cols-3 gap-1.5 pt-1">
-                      {["edl", "xml", "json"].map((fmt) => {
-                        const baseFile = primaryExport.path.split(/[/\\]/).pop() || `${segId}.edl`;
-                        const rootName = baseFile.replace(/\.(edl|xml|json)$/i, "");
-                        const formatFilename = `${rootName}.${fmt}`;
-                        const formatUrl = `${apiBaseUrl}/outputs/${formatFilename}`;
-
-                        return (
-                          <a
-                            key={fmt}
-                            id={`download-${fmt}-${segId}`}
-                            href={formatUrl}
-                            download={formatFilename}
-                            className="py-1.5 px-2 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[11px] font-mono font-medium text-center border border-slate-700/60 transition-colors cursor-pointer"
-                            title={`Download ${fmt.toUpperCase()} timeline`}
-                          >
-                            .{fmt.toUpperCase()}
-                          </a>
-                        );
-                      })}
+                  {/* Viral Hook & SEO Metadata Box */}
+                  {meta?.hook && (
+                    <div className="p-2.5 rounded-lg bg-slate-950/80 border border-slate-800 space-y-1.5">
+                      <div className="flex items-center justify-between">
+                        <span className="text-[10px] font-mono font-bold text-amber-400 uppercase tracking-wider">
+                          ⚡ Viral Hook
+                        </span>
+                        <button
+                          type="button"
+                          id={`copy-meta-${segId}`}
+                          onClick={() => handleCopyTitleAndTags(segId, meta)}
+                          className="text-[10px] font-medium px-2 py-0.5 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 transition-colors cursor-pointer"
+                        >
+                          {copiedSegId === segId ? "✓ Copied!" : "📋 Copy Title & Tags"}
+                        </button>
+                      </div>
+                      <p className="text-xs text-slate-200 italic font-medium">
+                        "{meta.hook}"
+                      </p>
+                      <div className="flex flex-wrap gap-1 pt-0.5">
+                        {(meta.hashtags || []).map((tag: string) => (
+                          <span key={tag} className="text-[10px] font-mono text-indigo-400">
+                            {tag}
+                          </span>
+                        ))}
+                      </div>
                     </div>
                   )}
+
+                  {/* Secondary Individual Downloads */}
+                  <div className="space-y-1.5 pt-1 border-t border-slate-800/60">
+                    <div className="flex items-center justify-between">
+                      <span className="text-[10px] font-mono text-slate-400 uppercase">
+                        Individual Files:
+                      </span>
+                      <a
+                        id={`download-clip-${segId}`}
+                        href={clipUrl}
+                        download={clipFilename}
+                        className="text-[11px] font-semibold text-indigo-400 hover:text-indigo-300 transition-colors cursor-pointer flex items-center space-x-1"
+                      >
+                        <span>Download .MP4</span>
+                      </a>
+                    </div>
+
+                    {primaryExport && (
+                      <div className="grid grid-cols-4 gap-1.5">
+                        {["edl", "xml", "json", "srt"].map((fmt) => {
+                          const baseFile = primaryExport.path.split(/[/\\]/).pop() || `${segId}.edl`;
+                          const rootName = baseFile.replace(/\.(edl|xml|json|srt)$/i, "");
+                          const formatFilename = `${rootName}.${fmt}`;
+                          const formatUrl = `${apiBaseUrl}/outputs/${formatFilename}`;
+
+                          return (
+                            <a
+                              key={fmt}
+                              id={`download-${fmt}-${segId}`}
+                              href={formatUrl}
+                              download={formatFilename}
+                              className="py-1 px-1 rounded bg-slate-800 hover:bg-slate-700 text-slate-300 text-[10px] font-mono font-medium text-center border border-slate-700/60 transition-colors cursor-pointer"
+                              title={`Download ${fmt.toUpperCase()} timeline / subtitles`}
+                            >
+                              .{fmt.toUpperCase()}
+                            </a>
+                          );
+                        })}
+                      </div>
+                    )}
+                  </div>
                 </div>
 
                 {/* Thumbs up / down Feedback Controls (Section 7a) */}
                 <div id={`feedback-controls-${segId}`} className="pt-2 border-t border-slate-800/80">
                   <div className="flex items-center justify-between text-xs">
-                    <span className="text-[11px] text-slate-400 font-medium">Framing Quality:</span>
+                    <span className="text-[11px] text-slate-400 font-medium">
+                      Framing Quality:{" "}
+                      <span className="text-emerald-400 font-mono font-semibold">
+                        {(confidenceScore * 100).toFixed(0)}% (Optimal)
+                      </span>
+                    </span>
                     <div className="flex items-center space-x-1.5">
                       <button
                         type="button"

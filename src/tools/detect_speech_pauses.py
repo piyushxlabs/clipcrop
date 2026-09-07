@@ -9,11 +9,13 @@ from __future__ import annotations
 import asyncio
 from pathlib import Path
 from typing import Any
+
 import numpy as np
 import torch
 
 from src.config import RuntimeConfig
 from src.tools.model_loader import load_silero_vad_model
+from src.tools.subprocess_runner import run_async_subprocess
 from src.tools.schemas.detect_speech_pauses import (
     DetectSpeechPausesInput,
     DetectSpeechPausesOutput,
@@ -27,12 +29,14 @@ async def _extract_audio_pcm(
     sampling_rate: int = 16000,
 ) -> np.ndarray:
     """Extract 1-channel raw PCM float32 audio via ffmpeg pipe."""
+    ffmpeg_bin = str(Path(ffmpeg_path).resolve())
+    target_file = str(Path(media_path).resolve())
     cmd = [
-        ffmpeg_path,
+        ffmpeg_bin,
         "-v",
         "error",
         "-i",
-        media_path,
+        target_file,
         "-f",
         "f32le",
         "-ac",
@@ -41,15 +45,10 @@ async def _extract_audio_pcm(
         str(sampling_rate),
         "-",
     ]
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        err = stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"FFmpeg audio extraction failed (exit {proc.returncode}): {err}")
+    returncode, stdout, stderr = await run_async_subprocess(cmd)
+    if returncode != 0:
+        err = stderr.decode("utf-8", errors="replace").strip() or stdout.decode("utf-8", errors="replace").strip() or f"FFmpeg exited with code {returncode}"
+        raise RuntimeError(f"FFmpeg audio extraction failed (exit {returncode}): {err}")
 
     if not stdout:
         return np.array([], dtype=np.float32)
@@ -172,7 +171,7 @@ async def detect_speech_pauses(
                 sampling_rate_used=input_data.sampling_rate,
             )
         except Exception as e:
-            last_error = str(e)
+            last_error = str(e) or repr(e)
             if attempt == 0:
                 await asyncio.sleep(0.05)
                 continue

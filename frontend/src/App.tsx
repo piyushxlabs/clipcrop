@@ -270,7 +270,10 @@ export const App: React.FC = () => {
               renderedClips={state.renderedClips}
               cropPathExports={state.cropPathExports}
               cropPaths={state.cropPaths}
+              confidenceGateResults={state.confidenceGateResults}
+              trackingResults={state.trackingResults}
               onSubmitFeedback={submitFeedback}
+              runStatus={state.runStatus}
             />
 
             {/* 8-Stage Execution Timeline */}
@@ -278,6 +281,7 @@ export const App: React.FC = () => {
               stages={state.stages}
               currentStage={state.currentStage}
               elapsedSeconds={state.elapsedSeconds}
+              runStatus={state.runStatus}
               sourceVideo={state.sourceVideo}
               transcriptSegments={state.transcriptSegments}
               vadSegments={state.vadSegments}

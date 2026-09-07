@@ -10,6 +10,7 @@ import asyncio
 from pathlib import Path
 
 from src.config import RuntimeConfig
+from src.tools.subprocess_runner import run_async_subprocess
 from src.tools.schemas.render_vertical_clip import (
     RenderVerticalClipInput,
     RenderVerticalClipOutput,
@@ -21,7 +22,7 @@ def _validate_output_sandbox(output_path_str: str, source_path_str: str, output_
     out_path = Path(output_path_str).resolve()
     src_path = Path(source_path_str).resolve()
 
-    if ".." in output_path_str:
+    if any(part == ".." for part in Path(output_path_str).parts):
         raise ValueError("output_path must not contain '..' path-traversal sequences.")
 
     if out_path == src_path:
@@ -51,18 +52,30 @@ async def _run_ffmpeg_render(
     output_path: str,
     crf: int = 20,
     preset: str = "fast",
+    burn_subtitles: bool = False,
+    subtitles_path: str | None = None,
 ) -> None:
-    """Execute ffmpeg subprocess with crop and scale filter chain."""
+    """Execute ffmpeg subprocess with crop, scale, and optional subtitles filter chain."""
+    ffmpeg_bin = str(Path(ffmpeg_path).resolve())
+    src_file = str(Path(source_video_path).resolve())
+    out_file = str(Path(output_path).resolve())
+
     start_sec = max(0.0, start_ms / 1000.0)
     duration_sec = max(0.1, (end_ms - start_ms) / 1000.0)
 
-    vf_filter = (
-        f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y},"
-        f"scale={output_width}:{output_height}:flags=bicubic"
-    )
+    vf_filters = [
+        f"crop={crop_w}:{crop_h}:{crop_x}:{crop_y}",
+        f"scale={output_width}:{output_height}:flags=bicubic",
+    ]
+
+    if burn_subtitles and subtitles_path and Path(subtitles_path).exists():
+        escaped_sub = Path(subtitles_path).resolve().as_posix().replace(":", "\\:")
+        vf_filters.append(f"subtitles='{escaped_sub}'")
+
+    vf_filter = ",".join(vf_filters)
 
     cmd = [
-        ffmpeg_path,
+        ffmpeg_bin,
         "-v",
         "error",
         "-ss",
@@ -70,7 +83,7 @@ async def _run_ffmpeg_render(
         "-t",
         f"{duration_sec:.3f}",
         "-i",
-        source_video_path,
+        src_file,
         "-filter:v",
         vf_filter,
         "-c:v",
@@ -82,18 +95,13 @@ async def _run_ffmpeg_render(
         "-c:a",
         "copy",
         "-y",
-        output_path,
+        out_file,
     ]
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        err = stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"FFmpeg rendering failed (exit {proc.returncode}): {err}")
+    returncode, stdout, stderr = await run_async_subprocess(cmd)
+    if returncode != 0:
+        err = stderr.decode("utf-8", errors="replace").strip() or stdout.decode("utf-8", errors="replace").strip() or f"FFmpeg exited with code {returncode}"
+        raise RuntimeError(f"FFmpeg rendering failed (exit {returncode}): {err}")
 
 
 async def render_vertical_clip(
@@ -126,6 +134,9 @@ async def render_vertical_clip(
     last_error: str | None = None
     for attempt in range(2):
         try:
+            # On first attempt, use input_data.burn_subtitles.
+            # If retry is required, fallback without subtitles to guarantee video renders.
+            should_burn = input_data.burn_subtitles and (attempt == 0)
             await _run_ffmpeg_render(
                 ffmpeg_path=config.ffmpeg_path,
                 source_video_path=input_data.source_video_path,
@@ -140,6 +151,8 @@ async def render_vertical_clip(
                 output_path=str(dest_path),
                 crf=input_data.crf,
                 preset=input_data.preset,
+                burn_subtitles=should_burn,
+                subtitles_path=input_data.subtitles_path,
             )
 
             if dest_path.exists() and dest_path.stat().st_size > 0:
@@ -154,7 +167,7 @@ async def render_vertical_clip(
             raise RuntimeError("Rendered file was not created or has 0 bytes.")
 
         except Exception as e:
-            last_error = str(e)
+            last_error = str(e) or repr(e)
             if dest_path.exists():
                 try:
                     dest_path.unlink()

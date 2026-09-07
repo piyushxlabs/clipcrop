@@ -89,6 +89,12 @@ class JsonFileSpanExporter(SpanExporter):
         pass
 
 
+def _safe_set_attribute(span: trace.Span, key: str, value: Any) -> None:
+    """Set attribute on span strictly when value is a non-null primitive (str, int, float, bool, bytes)."""
+    if key and value is not None and isinstance(value, (str, int, float, bool, bytes)):
+        span.set_attribute(key, value)
+
+
 class PipelineTracer:
     """Manages hierarchical span lifecycle and domain attribute capture for a run session.
 
@@ -116,11 +122,11 @@ class PipelineTracer:
     def start_root_span(self, source_path: str | None = None) -> trace.Span:
         """Start root 'run' span representing the single-shot session."""
         span = self.tracer.start_span("run")
-        span.set_attribute("clipcrop.session_id", self.session_id)
+        _safe_set_attribute(span, "clipcrop.session_id", self.session_id)
         if source_path:
             # File metadata only, never content, per Section 6
             filename = Path(source_path).name
-            span.set_attribute("clipcrop.source.filename", filename)
+            _safe_set_attribute(span, "clipcrop.source.filename", filename)
 
         self.root_span = span
         self._active_spans["root"] = span
@@ -129,7 +135,7 @@ class PipelineTracer:
     def end_root_span(self, outcome: str = "success") -> None:
         """Close root span and flush all spans to disk."""
         if self.root_span:
-            self.root_span.set_attribute("clipcrop.run.outcome", outcome)
+            _safe_set_attribute(self.root_span, "clipcrop.run.outcome", outcome)
             if outcome != "success":
                 self.root_span.set_status(Status(StatusCode.ERROR, description=outcome))
             else:
@@ -148,8 +154,8 @@ class PipelineTracer:
             f"stage:{stage_name}",
             context=parent_context,
         )
-        span.set_attribute("clipcrop.stage.name", stage_name)
-        span.set_attribute("clipcrop.session_id", self.session_id)
+        _safe_set_attribute(span, "clipcrop.stage.name", stage_name)
+        _safe_set_attribute(span, "clipcrop.session_id", self.session_id)
         self._active_spans[f"stage:{stage_name}"] = span
         return span
 
@@ -166,11 +172,10 @@ class PipelineTracer:
         if span:
             if attributes:
                 for k, v in attributes.items():
-                    span.set_attribute(k, v)
+                    _safe_set_attribute(span, k, v)
             if not success:
                 span.set_status(Status(StatusCode.ERROR, description=error_message or "Stage failed"))
-                if error_message:
-                    span.set_attribute("error.type", error_message)
+                _safe_set_attribute(span, "error.type", error_message)
             else:
                 span.set_status(Status(StatusCode.OK))
             span.end()
@@ -189,8 +194,8 @@ class PipelineTracer:
             f"segment:{segment_id}",
             context=parent_context,
         )
-        span.set_attribute("clipcrop.segment.id", segment_id)
-        span.set_attribute("clipcrop.session_id", self.session_id)
+        _safe_set_attribute(span, "clipcrop.segment.id", segment_id)
+        _safe_set_attribute(span, "clipcrop.session_id", self.session_id)
         self._active_spans[f"segment:{segment_id}"] = span
         return span
 
@@ -208,20 +213,16 @@ class PipelineTracer:
         key = f"segment:{segment_id}"
         span = self._active_spans.pop(key, None)
         if span:
-            if confidence is not None:
-                span.set_attribute("clipcrop.segment.confidence", confidence)
-            if gate_decision is not None:
-                span.set_attribute("clipcrop.gate.decision", gate_decision)
-            if gate_threshold is not None:
-                span.set_attribute("clipcrop.gate.threshold", gate_threshold)
+            _safe_set_attribute(span, "clipcrop.segment.confidence", confidence)
+            _safe_set_attribute(span, "clipcrop.gate.decision", gate_decision)
+            _safe_set_attribute(span, "clipcrop.gate.threshold", gate_threshold)
             if attributes:
                 for k, v in attributes.items():
-                    span.set_attribute(k, v)
+                    _safe_set_attribute(span, k, v)
 
             if not success:
                 span.set_status(Status(StatusCode.ERROR, description=error_message or "Segment failed"))
-                if error_message:
-                    span.set_attribute("error.type", error_message)
+                _safe_set_attribute(span, "error.type", error_message)
             else:
                 span.set_status(Status(StatusCode.OK))
             span.end()
@@ -243,19 +244,18 @@ class PipelineTracer:
         )
 
         span = self.tracer.start_span(f"tool:{tool_name}", context=parent_context)
-        span.set_attribute("clipcrop.tool.name", tool_name)
-        span.set_attribute("clipcrop.stage.name", stage_name)
-        if segment_id:
-            span.set_attribute("clipcrop.segment.id", segment_id)
+        _safe_set_attribute(span, "clipcrop.tool.name", tool_name)
+        _safe_set_attribute(span, "clipcrop.stage.name", stage_name)
+        _safe_set_attribute(span, "clipcrop.segment.id", segment_id)
         if attributes:
             for k, v in attributes.items():
-                span.set_attribute(k, v)
+                _safe_set_attribute(span, k, v)
 
         if not success:
             span.set_status(Status(StatusCode.ERROR, description=error_message or "Tool execution failed"))
-            if error_message:
-                span.set_attribute("error.type", error_message)
+            _safe_set_attribute(span, "error.type", error_message)
         else:
             span.set_status(Status(StatusCode.OK))
 
         span.end()
+

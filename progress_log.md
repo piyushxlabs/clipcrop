@@ -685,3 +685,75 @@
 - `node frontend/test_verification.mjs`: 21 passed with code 0.
 - Pass
 ---
+
+## Step 22 — Auto-Generated Subtitles (.SRT) & Smart Peak Thumbnail Extraction
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented `export_subtitles` tool in `src/tools/export_subtitles.py` generating standard SubRip (.srt) subtitles with sequential numbering and relative millisecond timecodes (`HH:MM:SS,mmm --> HH:MM:SS,mmm`) clamped to candidate segment boundaries.
+- Integrated subtitle export into Stage 7 of `src/agents/pipeline_controller.py` producing `{session_id}_{segment_id}_subtitles.srt` and `{session_id}_{segment_id}_crop_path.srt`.
+- Integrated smart peak thumbnail extraction into Stage 7 of `src/agents/pipeline_controller.py`: dynamically scores tracking frames by MediaPipe detection score weighted by proximity to segment center, and executes non-blocking 1-frame FFmpeg extraction (`ffmpeg -ss {rel_sec} -i {vertical_mp4} -vframes 1 -q:v 2 {thumb_path}`) via `run_async_subprocess`.
+- Added defensive unlinking for subtitle and thumbnail files upon cancellation or pipeline export failure.
+- Updated `GET /outputs/{filename}` in `src/main.py` with MIME mappings for `image/jpeg` (`.jpg`, `.jpeg`) and `text/plain` (`.srt`).
+- Updated `frontend/src/components/ClipResultsGrid.tsx` with dynamic `poster={thumbUrl}` video preview and added `.SRT` download button alongside `.EDL`, `.XML`, and `.JSON` timeline exports in a responsive 4-column grid.
+- Added comprehensive unit tests in `tests/unit/test_tools.py` (`test_export_subtitles_formatting`) and `tests/unit/test_api_server.py` (`test_get_deliverable` asserting HTTP 200 and MIME headers for `.jpg` and `.srt`).
+
+**Files Created:**
+- `src/tools/export_subtitles.py` — SubRip (.srt) subtitle serializer and exporter tool with zero external dependencies.
+
+**Files Modified:**
+- `src/agents/pipeline_controller.py` — Wired subtitle generation and smart thumbnail extraction into Stage 7 with cancellation cleanup.
+- `src/main.py` — Added `image/jpeg` and `text/plain` MIME types in `/outputs/{filename}` deliverable endpoint.
+- `frontend/src/components/ClipResultsGrid.tsx` — Attached poster image to video player and added `.SRT` download button.
+- `tests/unit/test_tools.py` — Added unit test for SRT timecodes, overlapping speech span filtering, and file writing.
+- `tests/unit/test_api_server.py` — Added assertions verifying `.jpg` and `.srt` deliverable endpoints.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/ -v`: 88 passed in 98.19s (0 failures).
+- `cd frontend && pnpm run build`: Vite production bundle built successfully in 898ms with 0 errors.
+- Live API run verification with `scripts/test_deliverables_live.py`: verified HTTP 200 and correct Content-Type for all deliverables (`vertical.mp4`, `crop_path.edl`, `crop_path.xml`, `crop_path.json`, `crop_path.srt`, `subtitles.srt`, `thumbnail.jpg`).
+- Pass
+---
+## Step 23 — Hormozi-Style Highlighted Captions, Offline Viral Metadata, Peak Cover Art & 1-Click ZIP Creator Bundle
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented kinetic ASS subtitle generator with Hormozi-style active-word highlighting (`{\c&H0000FFFF&}` vibrant yellow, bold Arial/Montserrat uppercase, thick outline, safe margins) in `src/tools/export_subtitles.py`.
+- Integrated burned-in subtitle rendering in `src/tools/render_vertical_clip.py` via FFmpeg `subtitles='...'` video filter, including Windows path colon escaping (`C\:/...`) and automated single-retry fallback to clean render if subtitle filter fails.
+- Created `src/tools/extract_thumbnail.py` for peak detection score cover thumbnail extraction during active speech intervals.
+- Created `src/tools/generate_clip_metadata.py` providing a 100% local, offline heuristic viral hook generator, 3 title variants, and 5 hashtags saved to `_metadata.json`.
+- Created `src/tools/bundle_deliverables.py` packaging all rendered assets (`.mp4`, `.edl`, `.xml`, `.json`, `.srt`, `.jpg`, and formatted `README_METADATA.txt`) into a 1-click master ZIP archive (`_complete_pack.zip`).
+- Wired pre-generation of subtitles, burned subtitle render input, thumbnail extraction, metadata generation, and ZIP bundling into Stage 7 of `src/agents/pipeline_controller.py` with full cancellation and failure rollback.
+- Added MIME type support for `application/zip` (`.zip`) and `text/x-ssa` (`.ass`) in `src/main.py`.
+- Upgraded frontend `frontend/src/components/ClipResultsGrid.tsx` with dynamic thumbnail preview, viral hook banner, 1-click "Copy Title & Tags" button, and prominent master `[📦 Download Complete Creator Pack (.ZIP)]` emerald button.
+- Expanded automated unit test suite in `tests/unit/test_tools.py` and `tests/unit/test_api_server.py`.
+
+**Files Created:**
+- `src/tools/extract_thumbnail.py` — High-energy peak cover thumbnail extractor matching high detection score frames with active speech intervals.
+- `src/tools/generate_clip_metadata.py` — 100% local, offline heuristic viral opening hook, 3 title variants, and 5 hashtags engine.
+- `src/tools/bundle_deliverables.py` — 1-click master ZIP archive builder packaging all clip deliverables and README.
+
+**Files Modified:**
+- `src/tools/export_subtitles.py` — Added ASS subtitle generator with Hormozi-style active word highlighting and configurable word chunking.
+- `src/tools/schemas/render_vertical_clip.py` — Added `burn_subtitles` and `subtitles_path` to Pydantic model and MCP JSON schema with 100% parameter parity.
+- `src/tools/render_vertical_clip.py` — Added FFmpeg `subtitles` filter with Windows path escaping and defensive fallback to clean video.
+- `src/agents/pipeline_controller.py` — Wired subtitle generation, burned subtitles, thumbnail, viral metadata, and ZIP bundling into Stage 7.
+- `src/main.py` — Added MIME mappings for `.zip` and `.ass` deliverable downloads.
+- `frontend/src/components/ClipResultsGrid.tsx` — Added poster thumbnail preview, viral hook pill, copy title & tags helper, and master ZIP download button.
+- `tests/unit/test_tools.py` — Added unit tests for ASS subtitles, viral metadata, and deliverable bundle creation.
+- `tests/unit/test_api_server.py` — Added test assertions for `.zip` and `.ass` downloads.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/ -v`: 91 passed in 82.71s (100% passing across all unit, integration, and guardrail test suites).
+- `cd frontend && pnpm run build`: Built production bundle in 895ms with 0 errors.
+- `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Verified end-to-end generation of `.mp4`, `.edl`, `.xml`, `.json`, `.srt`, `.ass`, `.jpg`, `_metadata.json`, and `_complete_pack.zip`. Verified ZIP contents and README metadata integrity.
+- Pass
+---

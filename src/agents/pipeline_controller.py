@@ -43,10 +43,15 @@ from src.state.schema import (
 )
 from src.tools.candidate_scorer import score_candidate_segments
 from src.tools.confidence_gate import confidence_gate_decision
+from src.tools.bundle_deliverables import create_deliverables_bundle
 from src.tools.decode_and_validate_source import decode_and_validate_source
 from src.tools.detect_speech_pauses import detect_speech_pauses
 from src.tools.export_crop_path_data import export_crop_path_data
+from src.tools.export_subtitles import export_ass_subtitles, export_subtitles
+from src.tools.extract_thumbnail import extract_thumbnail
+from src.tools.generate_clip_metadata import generate_clip_metadata
 from src.tools.render_vertical_clip import render_vertical_clip
+from src.tools.subprocess_runner import run_async_subprocess
 from src.tools.schemas.decode_and_validate_source import DecodeAndValidateSourceInput
 from src.tools.schemas.detect_speech_pauses import DetectSpeechPausesInput
 from src.tools.schemas.export_crop_path_data import ExportCropPathDataInput
@@ -466,10 +471,12 @@ class PipelineController:
 
     async def _execute_stage_3_score_candidates(self) -> None:
         """Stage 3: Score Candidates via deterministic heuristic candidate_scorer."""
+        source_dur = self.state.source_video.duration_seconds if self.state.source_video else None
         candidates = score_candidate_segments(
             self.state.transcript_segments,
             self.state.vad_segments,
             self.config,
+            source_duration_seconds=source_dur,
         )
 
         if not candidates:
@@ -508,6 +515,9 @@ class PipelineController:
                     },
                 )
 
+        source_w = self.state.source_video.width if self.state.source_video else None
+        source_h = self.state.source_video.height if self.state.source_video else None
+
         tasks = [
             track_speaker_position(
                 TrackSpeakerPositionInput(
@@ -519,6 +529,8 @@ class PipelineController:
                 ),
                 self.config,
                 executor=self.executor,
+                source_width=source_w,
+                source_height=source_h,
             )
             for cand in self.state.candidate_segments
         ]
@@ -753,6 +765,18 @@ class PipelineController:
                 continue
 
             out_clip_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_vertical.mp4"
+            out_srt_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_subtitles.srt"
+            out_srt_crop_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_crop_path.srt"
+            out_ass_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_subtitles.ass"
+
+            # Pre-generate subtitles so they can be burned into the vertical video
+            try:
+                export_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_srt_path)
+                export_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_srt_crop_path)
+                export_ass_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_ass_path)
+            except Exception:
+                pass
+
             kfs_model = [
                 CropKeyframeModel(
                     timestamp_ms=k.timestamp_ms,
@@ -773,6 +797,8 @@ class PipelineController:
                 output_path=str(out_clip_path),
                 crf=20,
                 preset="fast",
+                burn_subtitles=True if out_ass_path.exists() else False,
+                subtitles_path=str(out_ass_path) if out_ass_path.exists() else None,
             )
 
             call_id_render = f"call_render_{cand.segment_id}"
@@ -805,6 +831,8 @@ class PipelineController:
             if self.cancelled or self._cancel_event.is_set():
                 if out_clip_path.exists():
                     out_clip_path.unlink(missing_ok=True)
+                if out_ass_path.exists():
+                    out_ass_path.unlink(missing_ok=True)
                 self._check_cancellation()
 
             if render_out.success and render_out.output_file_path:
@@ -825,6 +853,12 @@ class PipelineController:
 
                 # Deliverable Contract: Immediately serialize crop path data for this segment
                 out_edl_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_crop_path.edl"
+                out_json_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_crop_path.json"
+                out_xml_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_crop_path.xml"
+                out_thumb_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_thumbnail.jpg"
+                out_meta_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_metadata.json"
+                out_zip_path = self.config.output_dir / f"{self.session_id}_{cand.segment_id}_complete_pack.zip"
+
                 export_in = ExportCropPathDataInput(
                     segment_id=cand.segment_id,
                     crop_keyframes=kfs_model,
@@ -841,6 +875,81 @@ class PipelineController:
                 export_out = export_crop_path_data(export_in, self.config)
                 if asyncio.iscoroutine(export_out):
                     export_out = await export_out
+
+                # Also generate companion JSON and XML timeline deliverables
+                export_json_res = export_crop_path_data(
+                    ExportCropPathDataInput(
+                        segment_id=cand.segment_id,
+                        crop_keyframes=kfs_model,
+                        output_path=str(out_json_path),
+                        format="json",
+                    ),
+                    self.config,
+                )
+                if asyncio.iscoroutine(export_json_res):
+                    await export_json_res
+
+                export_xml_res = export_crop_path_data(
+                    ExportCropPathDataInput(
+                        segment_id=cand.segment_id,
+                        crop_keyframes=kfs_model,
+                        output_path=str(out_xml_path),
+                        format="xml",
+                    ),
+                    self.config,
+                )
+                if asyncio.iscoroutine(export_xml_res):
+                    await export_xml_res
+
+                # Extract high-energy cover thumbnail
+                try:
+                    tr = self.state.tracking_results.get(cand.segment_id)
+                    await extract_thumbnail(
+                        vertical_mp4_path=out_clip_path,
+                        output_thumbnail_path=out_thumb_path,
+                        per_frame_positions=tr.per_frame_positions if tr else None,
+                        vad_spans=self.state.vad_segments,
+                        segment_start_ms=cand.start_ms,
+                        segment_end_ms=cand.end_ms,
+                    )
+                except Exception:
+                    pass
+
+                # Offline viral title, hook & SEO metadata generation
+                meta_dict: dict[str, Any] | None = None
+                try:
+                    seg_text = " ".join(
+                        seg.text for seg in self.state.transcript_segments
+                        if seg.end_ms > cand.start_ms and seg.start_ms < cand.end_ms
+                    )
+                    meta_dict = generate_clip_metadata(
+                        segment_id=cand.segment_id,
+                        transcript_text=seg_text,
+                        duration_seconds=(cand.end_ms - cand.start_ms) / 1000.0,
+                        energy_score=getattr(cand, "composite_score", 0.8),
+                        output_path=out_meta_path,
+                    )
+                except Exception:
+                    pass
+
+                # 1-Click Master ZIP Deliverable Bundle
+                try:
+                    bundle_files = {
+                        f"{cand.segment_id}_vertical.mp4": out_clip_path,
+                        f"{cand.segment_id}_crop_path.edl": out_edl_path,
+                        f"{cand.segment_id}_crop_path.xml": out_xml_path,
+                        f"{cand.segment_id}_crop_path.json": out_json_path,
+                        f"{cand.segment_id}_subtitles.srt": out_srt_path,
+                        f"{cand.segment_id}_thumbnail.jpg": out_thumb_path,
+                    }
+                    create_deliverables_bundle(
+                        zip_output_path=out_zip_path,
+                        segment_id=cand.segment_id,
+                        files_to_bundle=bundle_files,
+                        metadata=meta_dict,
+                    )
+                except Exception:
+                    pass
 
                 self.tracer.record_tool_span(
                     "export_crop_path_data",
@@ -862,10 +971,13 @@ class PipelineController:
 
                 # Cancellation check after in-flight export call returns
                 if self.cancelled or self._cancel_event.is_set():
-                    if out_clip_path.exists():
-                        out_clip_path.unlink(missing_ok=True)
-                    if out_edl_path.exists():
-                        out_edl_path.unlink(missing_ok=True)
+                    for cleanup_p in [
+                        out_clip_path, out_edl_path, out_json_path, out_xml_path,
+                        out_srt_path, out_srt_crop_path, out_ass_path,
+                        out_thumb_path, out_meta_path, out_zip_path
+                    ]:
+                        if cleanup_p.exists():
+                            cleanup_p.unlink(missing_ok=True)
                     self._check_cancellation()
 
                 if export_out.success and export_out.output_file_path:
@@ -881,8 +993,13 @@ class PipelineController:
                             "crop_path_exports", "append-only", exp_ref.model_dump()
                         )
                 else:
-                    if out_edl_path.exists():
-                        out_edl_path.unlink(missing_ok=True)
+                    for cleanup_p in [
+                        out_edl_path, out_json_path, out_xml_path,
+                        out_srt_path, out_srt_crop_path, out_ass_path,
+                        out_thumb_path, out_meta_path, out_zip_path
+                    ]:
+                        if cleanup_p.exists():
+                            cleanup_p.unlink(missing_ok=True)
                     self._record_error(
                         PipelineStage.STAGE_7_RENDER_AND_EXPORT.value,
                         f"Export failed for {cand.segment_id}: {export_out.error}",

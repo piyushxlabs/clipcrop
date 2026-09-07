@@ -128,6 +128,24 @@ def test_post_runs_sanitizes_path_traversal_filename(
     assert saved_path.is_file()
 
 
+def test_post_runs_sanitizes_ellipsis_filename(
+    client: TestClient,
+    test_config: RuntimeConfig,
+) -> None:
+    """POST /runs sanitizes filename containing spaces and multiple consecutive dots (ellipsis)."""
+    files = {"file": ("... Give me 59 secs... I'll delete ...mp4", io.BytesIO(b"DUMMY_VIDEO"), "video/mp4")}
+    response = client.post("/runs", files=files)
+    assert response.status_code == 201
+    data = response.json()
+    run_id = data["run_id"]
+
+    assert "..." not in data["source_filename"]
+    assert ".." not in data["source_filename"]
+    assert " " not in data["source_filename"]
+    saved_path = test_config.upload_dir / f"{run_id}_{data['source_filename']}"
+    assert saved_path.is_file()
+
+
 # ---------------------------------------------------------------------------
 # 3. Emergency Stop / Cancellation Endpoint
 # ---------------------------------------------------------------------------
@@ -215,6 +233,48 @@ def test_get_deliverable_download(
     assert resp.status_code == 200
     assert resp.content == b"DELIVERABLE_MP4_BYTES"
     assert "video/mp4" in resp.headers.get("content-type", "")
+
+    # JSON deliverable
+    json_deliverable = test_config.output_dir / "seg_01_crop_path.json"
+    json_deliverable.write_text('{"test": 1}', encoding="utf-8")
+    resp_json = client.get("/outputs/seg_01_crop_path.json")
+    assert resp_json.status_code == 200
+    assert "application/json" in resp_json.headers.get("content-type", "")
+
+    # XML deliverable
+    xml_deliverable = test_config.output_dir / "seg_01_crop_path.xml"
+    xml_deliverable.write_text("<xml/>", encoding="utf-8")
+    resp_xml = client.get("/outputs/seg_01_crop_path.xml")
+    assert resp_xml.status_code == 200
+    assert "application/xml" in resp_xml.headers.get("content-type", "")
+
+    # JPG thumbnail deliverable
+    jpg_deliverable = test_config.output_dir / "seg_01_thumbnail.jpg"
+    jpg_deliverable.write_bytes(b"\xff\xd8\xff\xe0\x00\x10JFIF")
+    resp_jpg = client.get("/outputs/seg_01_thumbnail.jpg")
+    assert resp_jpg.status_code == 200
+    assert "image/jpeg" in resp_jpg.headers.get("content-type", "")
+
+    # SRT subtitle deliverable
+    srt_deliverable = test_config.output_dir / "seg_01_subtitles.srt"
+    srt_deliverable.write_text("1\n00:00:00,000 --> 00:00:01,000\nHello\n", encoding="utf-8")
+    resp_srt = client.get("/outputs/seg_01_subtitles.srt")
+    assert resp_srt.status_code == 200
+    assert "text/plain" in resp_srt.headers.get("content-type", "")
+
+    # ASS subtitle deliverable
+    ass_deliverable = test_config.output_dir / "seg_01_subtitles.ass"
+    ass_deliverable.write_text("[Script Info]\nTitle: Test\n", encoding="utf-8")
+    resp_ass = client.get("/outputs/seg_01_subtitles.ass")
+    assert resp_ass.status_code == 200
+    assert "text/x-ssa" in resp_ass.headers.get("content-type", "")
+
+    # ZIP master deliverable
+    zip_deliverable = test_config.output_dir / "seg_01_complete_pack.zip"
+    zip_deliverable.write_bytes(b"PK\x03\x04FAKEZIP")
+    resp_zip = client.get("/outputs/seg_01_complete_pack.zip")
+    assert resp_zip.status_code == 200
+    assert "application/zip" in resp_zip.headers.get("content-type", "")
 
     # Non-existent file
     assert client.get("/outputs/non_existent.mp4").status_code == 404

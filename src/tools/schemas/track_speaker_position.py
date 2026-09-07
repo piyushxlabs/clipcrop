@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
@@ -43,7 +44,7 @@ class TrackSpeakerPositionInput(BaseModel):
     @field_validator("video_path", "model_asset_path")
     @classmethod
     def validate_no_traversal(cls, v: str) -> str:
-        if ".." in v:
+        if any(part == ".." for part in Path(v).parts):
             raise ValueError("Paths must not contain '..' path-traversal sequences.")
         return v
 

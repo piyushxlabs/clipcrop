@@ -254,17 +254,26 @@ export function usePipelineStream() {
               ? "failed"
               : "completed";
           next.runStatus = status;
+          next.currentStage = null;
 
-          // Mark current active stage as completed
-          if (next.currentStage && next.stages[next.currentStage]) {
-            next.stages = {
-              ...next.stages,
-              [next.currentStage]: {
-                ...next.stages[next.currentStage],
-                status: status === "failed" ? "failed" : "completed",
-              },
+          const nextStages = { ...next.stages };
+          if (status === "completed") {
+            // Explicitly mark all pipeline stages as completed
+            for (const sId of ORDERED_STAGES) {
+              if (nextStages[sId]) {
+                nextStages[sId] = {
+                  ...nextStages[sId],
+                  status: nextStages[sId].status === "failed" ? "failed" : "completed",
+                };
+              }
+            }
+          } else if (prev.currentStage && nextStages[prev.currentStage]) {
+            nextStages[prev.currentStage] = {
+              ...nextStages[prev.currentStage],
+              status: status === "failed" ? "failed" : "completed",
             };
           }
+          next.stages = nextStages;
           break;
         }
       }

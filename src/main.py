@@ -130,13 +130,20 @@ RUN_REGISTRY: dict[str, RunSession] = {}
 
 
 def _sanitize_filename(filename: str) -> str:
-    """Extract base filename and remove unsafe path characters."""
-    base = Path(filename).name
-    # Strip non-alphanumeric characters except safe dots, dashes, underscores
-    sanitized = re.sub(r"[^a-zA-Z0-9._-]", "_", base)
-    if not sanitized or sanitized in {".", ".."}:
-        sanitized = "video.mp4"
-    return sanitized
+    """Extract base filename, sanitize unsafe characters, and collapse consecutive dots."""
+    raw_name = Path(filename).name
+    # Replace non-alphanumeric characters (except _, -, .) with underscores
+    clean = re.sub(r"[^a-zA-Z0-9_\.-]", "_", raw_name)
+    # Collapse multiple consecutive dots into a single dot (e.g. '...' -> '.')
+    clean = re.sub(r"\.{2,}", ".", clean)
+    # Extract stem and extension
+    stem = Path(clean).stem.strip("._ ")
+    ext = Path(clean).suffix.lower()
+    if not stem:
+        stem = "video"
+    if not ext:
+        ext = ".mp4"
+    return f"{stem}{ext}"
 
 
 # ---------------------------------------------------------------------------
@@ -222,10 +229,12 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
         # Write uploaded file in chunks
         bytes_written = 0
         try:
-            with open(dest_path, "wb") as out_file:
+            with open(dest_path, "wb") as buffer:
                 while chunk := await file.read(1024 * 1024):  # 1MB chunks
-                    out_file.write(chunk)
+                    buffer.write(chunk)
                     bytes_written += len(chunk)
+                buffer.flush()
+                os.fsync(buffer.fileno())
         except Exception as e:
             if dest_path.exists():
                 dest_path.unlink(missing_ok=True)
@@ -233,13 +242,24 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
                 status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
                 detail=f"Failed to write uploaded file to disk: {e}",
             ) from e
+        finally:
+            try:
+                await file.close()
+            except Exception:
+                pass
+            if hasattr(file, "file") and not file.file.closed:
+                try:
+                    file.file.close()
+                except Exception:
+                    pass
 
-        if bytes_written == 0:
+        # Verify written file on disk before initializing pipeline
+        if not (dest_path.is_file() and os.path.getsize(dest_path) > 0):
             if dest_path.exists():
                 dest_path.unlink(missing_ok=True)
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
-                detail="Uploaded file is empty (0 bytes).",
+                detail="Uploaded file is empty (0 bytes) or could not be verified on disk.",
             )
 
         # Build custom config if overrides provided
@@ -407,7 +427,24 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
                 detail=f"Deliverable file '{filename}' does not exist.",
             )
 
-        media_type = "video/mp4" if file_path.suffix.lower() == ".mp4" else "text/plain"
+        ext = file_path.suffix.lower()
+        if ext == ".mp4":
+            media_type = "video/mp4"
+        elif ext == ".json":
+            media_type = "application/json"
+        elif ext == ".xml":
+            media_type = "application/xml"
+        elif ext in {".jpg", ".jpeg"}:
+            media_type = "image/jpeg"
+        elif ext == ".srt":
+            media_type = "text/plain"
+        elif ext == ".ass":
+            media_type = "text/x-ssa"
+        elif ext == ".zip":
+            media_type = "application/zip"
+        else:
+            media_type = "text/plain"
+
         return FileResponse(
             path=file_path,
             filename=filename,

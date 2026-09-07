@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 21: Readiness Check
+- **Last Completed Step:** Step 22: Auto-Generated Subtitles (.SRT) & Smart Peak Thumbnail Extraction
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -106,8 +106,22 @@
   - Verified zero placeholder values across `.env` and `.env.example`
   - Verified Section 9.5 failure simulations (corrupt media, whisper retry/fallback, cancellation rollback, threshold boundary, micro budget circuit breaker, Pydantic validation)
   - Verified Section 9.6 non-negotiable requirements (10 candidate hard-cap, 90s time budget, paired deliverables, zero HITL checkpoints, local JSON tracing)
-  - 100% test pass rate across all 84 pytest unit and integration tests
-- **Last Completed Step:** Step 21: Readiness Check
-- **Pending Next Step:** None (All 21 Steps Completed in AGENT_MASTER_PLAN.md — Project Ready)
+  - Subtitle export tool (`src/tools/export_subtitles.py`) generating relative SubRip timecodes clamped to candidate boundaries
+  - Smart peak thumbnail extraction via MediaPipe detection score scoring and non-blocking 1-frame FFmpeg extraction
+  - Video preview poster image and `.SRT` download button in `ClipResultsGrid.tsx` alongside `.EDL`, `.XML`, and `.JSON`
+  - MIME type mapping for `image/jpeg` and `text/plain` in `GET /outputs/{filename}` deliverable endpoint
+  - Kinetic ASS subtitle generation with Hormozi-style active-word highlighting (`src/tools/export_subtitles.py`)
+  - Burned-in dynamic caption rendering via FFmpeg `subtitles` filter with Windows path colon escaping and single-retry fallback (`src/tools/render_vertical_clip.py`)
+  - Standalone peak-detection cover thumbnail extraction tool (`src/tools/extract_thumbnail.py`)
+  - 100% offline heuristic viral hook, 3 title variants, and 5 hashtags engine (`src/tools/generate_clip_metadata.py`)
+  - 1-click master ZIP archive builder packaging all clip deliverables and README (`src/tools/bundle_deliverables.py`)
+  - Stage 7 pipeline controller integration with defensive execution and comprehensive rollback cleanup
+  - Deliverable downloads for `.zip` (`application/zip`) and `.ass` (`text/x-ssa`) in `GET /outputs/{filename}`
+  - Frontend dashboard enhancement with thumbnail preview, viral hook banner, copy title & tags helper, and master `[📦 Download Complete Creator Pack (.ZIP)]` button
+  - 100% test pass rate across all 91 pytest unit, integration, and guardrail tests
+- **Last Completed Step:** Step 23: Hormozi-Style Highlighted Captions, Offline Viral Metadata, Peak Cover Art & 1-Click ZIP Creator Bundle
+- **Pending Next Step:** None (All features and enhancements complete — Engine Fully Operational)
 - **Known Issues / Blockers:** None
+
+
 

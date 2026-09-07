@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+from pathlib import Path
 from typing import Any, Literal
 from typing_extensions import Self
 from pydantic import BaseModel, ConfigDict, Field, field_validator, model_validator
@@ -25,11 +26,13 @@ class RenderVerticalClipInput(BaseModel):
     video_codec: Literal["libx264"] = Field("libx264", description="Video encoder to use.")
     crf: int = Field(20, ge=0, le=51, description="Constant rate factor for encoding quality.")
     preset: Literal["veryfast", "fast", "medium"] = Field("fast", description="Encoder speed/quality preset.")
+    burn_subtitles: bool = Field(default=False, description="Whether to burn in styled subtitles.")
+    subtitles_path: str | None = Field(default=None, description="Path to ASS/SRT subtitles file to burn in.")
 
     @field_validator("source_video_path", "output_path")
     @classmethod
     def validate_no_traversal(cls, v: str) -> str:
-        if ".." in v:
+        if any(part == ".." for part in Path(v).parts):
             raise ValueError("Paths must not contain '..' path-traversal sequences.")
         return v
 
@@ -93,6 +96,8 @@ RENDER_VERTICAL_CLIP_SCHEMA: dict[str, Any] = {
             "video_codec": {"type": "string", "enum": ["libx264"], "description": "Video encoder to use."},
             "crf": {"type": "integer", "minimum": 0, "maximum": 51, "description": "Constant rate factor."},
             "preset": {"type": "string", "enum": ["veryfast", "fast", "medium"], "description": "Encoder preset."},
+            "burn_subtitles": {"type": "boolean", "description": "Whether to burn in styled subtitles."},
+            "subtitles_path": {"type": ["string", "null"], "description": "Path to ASS/SRT subtitles file to burn in."},
         },
         "required": [
             "segment_id",

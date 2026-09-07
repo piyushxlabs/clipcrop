@@ -44,11 +44,26 @@ def score_candidate_segments(
     transcript_segments: list[TranscriptSegment],
     vad_segments: list[SpeechSpan],
     config: RuntimeConfig,
+    source_duration_seconds: float | None = None,
 ) -> list[CandidateSegment]:
     """Score and rank candidate clip segments from speech spans and transcript."""
-    if not transcript_segments and not vad_segments:
-        # Silence-over-guessing policy: never fabricate candidate segments
+    # Discard Whisper segments with empty text or lone punctuation
+    valid_transcripts: list[TranscriptSegment] = []
+    for seg in transcript_segments:
+        txt = seg.text.strip()
+        if txt and re.sub(r"^[^\w]+$", "", txt).strip():
+            valid_transcripts.append(seg)
+    transcript_segments = valid_transcripts
+
+    if not transcript_segments or not vad_segments:
+        # Silence-over-guessing policy: never fabricate candidate segments when speech or VAD is absent
         return []
+
+    max_duration_ms: int | None = (
+        int(round(source_duration_seconds * 1000))
+        if source_duration_seconds is not None and source_duration_seconds > 0
+        else None
+    )
 
     # If transcript is available, define candidate windows based on transcript sentences/groups
     candidates_raw: list[dict[str, Any]] = []
@@ -101,6 +116,24 @@ def score_candidate_segments(
                     }
                 )
 
+    if not candidates_raw:
+        return []
+
+    # Enforce source duration clamp and filter out invalid/overflowed candidates
+    clamped_candidates: list[dict[str, Any]] = []
+    for cand in candidates_raw:
+        s_ms = cand["start_ms"]
+        e_ms = cand["end_ms"]
+        if max_duration_ms is not None:
+            if s_ms >= max_duration_ms:
+                continue
+            e_ms = min(e_ms, max_duration_ms)
+        if e_ms > s_ms and (e_ms - s_ms) >= 3000:
+            cand["start_ms"] = s_ms
+            cand["end_ms"] = e_ms
+            clamped_candidates.append(cand)
+
+    candidates_raw = clamped_candidates
     if not candidates_raw:
         return []
 

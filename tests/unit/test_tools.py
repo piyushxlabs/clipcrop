@@ -10,6 +10,7 @@ Verifies:
 
 from __future__ import annotations
 
+import json
 from pathlib import Path
 import re
 import pytest
@@ -124,6 +125,16 @@ async def test_decode_and_validate_source_rejects_path_traversal(mock_config: Ru
     """Assert path traversal sequences are rejected unconditionally."""
     with pytest.raises(ValidationError, match="path-traversal"):
         DecodeAndValidateSourceInput(source_path="uploads/../secret.mp4")
+
+
+@pytest.mark.asyncio
+async def test_decode_and_validate_source_allows_ellipsis_filename(mock_config: RuntimeConfig) -> None:
+    """Assert files containing ellipsis (...) in filename are not falsely flagged as path traversal."""
+    inp = DecodeAndValidateSourceInput(source_path="tests/fixtures/test...ellipsis...case.mp4")
+    assert inp.source_path == "tests/fixtures/test...ellipsis...case.mp4"
+    out = await decode_and_validate_source(inp, mock_config)
+    assert out.success is True
+    assert out.duration_seconds is not None and out.duration_seconds > 0
 
 
 # ---------------------------------------------------------------------------
@@ -263,6 +274,61 @@ def test_export_crop_path_data_edl_output(tmp_path: Path, mock_config: RuntimeCo
     assert "CROP_X=205" in content
 
 
+def test_export_crop_path_data_json_and_xml_output(tmp_path: Path, mock_config: RuntimeConfig) -> None:
+    """Assert Tool 7 serializes JSON telemetry and XML timeline formats."""
+    keyframes = [
+        CropKeyframeModel(timestamp_ms=0, x=200, y=0, width=405, height=720),
+        CropKeyframeModel(timestamp_ms=1000, x=205, y=0, width=405, height=720),
+    ]
+    test_config = RuntimeConfig(
+        upload_dir=mock_config.upload_dir,
+        output_dir=tmp_path,
+        models_dir=mock_config.models_dir,
+        ffmpeg_path=mock_config.ffmpeg_path,
+        ffprobe_path=mock_config.ffprobe_path,
+        confidence_threshold=mock_config.confidence_threshold,
+        max_candidates=mock_config.max_candidates,
+        time_budget_seconds=mock_config.time_budget_seconds,
+        trace_log_dir=mock_config.trace_log_dir,
+    )
+
+    # Test JSON export
+    json_file = tmp_path / "test_clip.json"
+    res_json = export_crop_path_data(
+        ExportCropPathDataInput(
+            segment_id="seg_01",
+            crop_keyframes=keyframes,
+            output_path=str(json_file),
+            format="json",
+        ),
+        config=test_config,
+    )
+    assert res_json.success is True
+    assert json_file.exists()
+    json_data = json.loads(json_file.read_text(encoding="utf-8"))
+    assert json_data["segment_id"] == "seg_01"
+    assert json_data["keyframe_count"] == 2
+    assert json_data["keyframes"][0]["x"] == 200
+
+    # Test XML export
+    xml_file = tmp_path / "test_clip.xml"
+    res_xml = export_crop_path_data(
+        ExportCropPathDataInput(
+            segment_id="seg_01",
+            crop_keyframes=keyframes,
+            output_path=str(xml_file),
+            format="xml",
+        ),
+        config=test_config,
+    )
+    assert res_xml.success is True
+    assert xml_file.exists()
+    xml_text = xml_file.read_text(encoding="utf-8")
+    assert "<xmeml version=\"4\">" in xml_text
+    assert "seg_01" in xml_text
+    assert "x=\"200\"" in xml_text
+
+
 # ---------------------------------------------------------------------------
 # 6. Candidate Scorer Determinism & Silence-Over-Guessing Tests
 # ---------------------------------------------------------------------------
@@ -373,6 +439,14 @@ async def test_track_speaker_position_execution(mock_config: RuntimeConfig) -> N
     assert len(out.per_frame_positions) > 0
     assert out.segment_confidence is not None
 
+    # Assert scaled coordinates for 1280x720 video (face centered around x ~ 644, origin_x > 400)
+    detected = [p for p in out.per_frame_positions if p.detection_score > 0.0]
+    assert len(detected) > 0
+    for p in detected:
+        assert p.bounding_box.origin_x > 400
+        assert p.bounding_box.width > 150
+
+
 
 @pytest.mark.asyncio
 async def test_render_vertical_clip_execution(tmp_path: Path, mock_config: RuntimeConfig) -> None:
@@ -415,3 +489,129 @@ async def test_render_vertical_clip_execution(tmp_path: Path, mock_config: Runti
     assert out.output_file_path is not None
     assert out_file.exists()
     assert out_file.stat().st_size > 0
+
+
+def test_export_subtitles_formatting(tmp_path: Path) -> None:
+    """Assert subtitle exporter produces valid relative SubRip timecodes and indexing."""
+    from src.tools.export_subtitles import (
+        export_subtitles,
+        generate_srt_content,
+        ms_to_srt_timecode,
+    )
+
+    # Timecode verification
+    assert ms_to_srt_timecode(0) == "00:00:00,000"
+    assert ms_to_srt_timecode(1250) == "00:00:01,250"
+    assert ms_to_srt_timecode(3661005) == "01:01:01,005"
+
+    transcripts = [
+        TranscriptSegment(start_ms=500, end_ms=2500, text="First utterance"),
+        TranscriptSegment(start_ms=3000, end_ms=5500, text="Second utterance"),
+        TranscriptSegment(start_ms=8000, end_ms=9000, text="Outside utterance"),
+    ]
+
+    # Candidate segment window: 1000ms to 6000ms
+    srt_content = generate_srt_content(1000, 6000, transcripts)
+    assert "1\n00:00:00,000 --> 00:00:01,500\nFirst utterance" in srt_content
+    assert "2\n00:00:02,000 --> 00:00:04,500\nSecond utterance" in srt_content
+    assert "Outside utterance" not in srt_content
+
+    out_file = tmp_path / "test.srt"
+    res = export_subtitles(1000, 6000, transcripts, out_file)
+    assert res is True
+    assert out_file.exists()
+    assert out_file.read_text(encoding="utf-8") == srt_content
+
+
+def test_export_ass_subtitles_formatting(tmp_path: Path) -> None:
+    """Assert ASS subtitle exporter produces Hormozi-style yellow word highlights and styling."""
+    from src.tools.export_subtitles import (
+        export_ass_subtitles,
+        generate_ass_content,
+        ms_to_ass_timecode,
+    )
+
+    assert ms_to_ass_timecode(0) == "0:00:00.00"
+    assert ms_to_ass_timecode(1250) == "0:00:01.25"
+
+    transcripts = [
+        TranscriptSegment(start_ms=1000, end_ms=5000, text="The greatest secret to productivity is consistency"),
+    ]
+
+    ass_content = generate_ass_content(1000, 5000, transcripts, words_per_chunk=3)
+    assert "[Script Info]" in ass_content
+    assert "[V4+ Styles]" in ass_content
+    assert "PlayResX: 1080" in ass_content
+    assert "PlayResY: 1920" in ass_content
+    assert "{\\c&H0000FFFF&}" in ass_content
+    assert "THE" in ass_content
+
+    out_file = tmp_path / "test.ass"
+    res = export_ass_subtitles(1000, 5000, transcripts, out_file, words_per_chunk=3)
+    assert res is True
+    assert out_file.exists()
+    assert out_file.read_text(encoding="utf-8") == ass_content
+
+
+def test_generate_clip_metadata(tmp_path: Path) -> None:
+    """Assert viral metadata engine generates opening hook, 3 titles, and 5 hashtags."""
+    from src.tools.generate_clip_metadata import generate_clip_metadata
+
+    out_json = tmp_path / "meta.json"
+    transcript = "Give me 59 seconds and I will show you how to code software."
+    meta = generate_clip_metadata(
+        segment_id="seg_01",
+        transcript_text=transcript,
+        duration_seconds=59.0,
+        energy_score=0.95,
+        output_path=out_json,
+    )
+
+    assert meta["segment_id"] == "seg_01"
+    assert "Give me 59 seconds" in meta["hook"]
+    assert len(meta["titles"]) == 3
+    assert len(meta["hashtags"]) == 5
+    assert any(tag in ["#Technology", "#AI", "#Productivity"] for tag in meta["hashtags"])
+    assert out_json.exists()
+
+
+def test_create_deliverables_bundle(tmp_path: Path) -> None:
+    """Assert master ZIP creator packages files and README_METADATA.txt."""
+    import zipfile
+    from src.tools.bundle_deliverables import create_deliverables_bundle
+
+    dummy_mp4 = tmp_path / "seg_01_vertical.mp4"
+    dummy_mp4.write_bytes(b"VIDEO")
+    dummy_edl = tmp_path / "seg_01_crop_path.edl"
+    dummy_edl.write_text("EDL", encoding="utf-8")
+
+    out_zip = tmp_path / "complete_pack.zip"
+    meta = {
+        "hook": "This is the hook",
+        "titles": ["Title 1", "Title 2", "Title 3"],
+        "hashtags": ["#Tag1", "#Tag2"],
+        "transcript": "Full speech transcript",
+    }
+
+    res = create_deliverables_bundle(
+        zip_output_path=out_zip,
+        segment_id="seg_01",
+        files_to_bundle={
+            "seg_01_vertical.mp4": dummy_mp4,
+            "seg_01_crop_path.edl": dummy_edl,
+        },
+        metadata=meta,
+    )
+
+    assert res == str(out_zip)
+    assert out_zip.exists()
+    with zipfile.ZipFile(out_zip, "r") as zf:
+        namelist = zf.namelist()
+        assert "seg_01_vertical.mp4" in namelist
+        assert "seg_01_crop_path.edl" in namelist
+        assert "README_METADATA.txt" in namelist
+        readme_txt = zf.read("README_METADATA.txt").decode("utf-8")
+        assert "VIRAL OPENING HOOK:" in readme_txt
+        assert "Title 1" in readme_txt
+
+

@@ -19,6 +19,7 @@ interface StageTimelineProps {
   stages: Record<PipelineStageId, StageState>;
   currentStage: PipelineStageId | null;
   elapsedSeconds: number;
+  runStatus?: string;
   sourceVideo: FileRef | null;
   transcriptSegments: TranscriptSegment[];
   vadSegments: SpeechSpan[];
@@ -42,6 +43,7 @@ export const StageTimeline: React.FC<StageTimelineProps> = ({
   stages,
   currentStage,
   elapsedSeconds,
+  runStatus,
   sourceVideo,
   transcriptSegments,
   vadSegments,
@@ -57,6 +59,8 @@ export const StageTimeline: React.FC<StageTimelineProps> = ({
       [stageId]: !prev[stageId],
     }));
   };
+
+  const isFinished = ["completed", "failed", "interrupted"].includes(runStatus || "");
 
   return (
     <div id="stage-timeline" className="bg-slate-900/60 backdrop-blur-md rounded-2xl border border-slate-800/80 p-5 shadow-xl space-y-4">
@@ -74,7 +78,7 @@ export const StageTimeline: React.FC<StageTimelineProps> = ({
             <p className="text-xs text-slate-400">Deterministic 8-stage video reframing workflow</p>
           </div>
         </div>
-        {currentStage && (
+        {currentStage && !isFinished && (
           <div className="flex items-center space-x-2 text-xs font-mono text-indigo-400 bg-indigo-950/40 px-3 py-1 rounded-full border border-indigo-900/50">
             <span className="w-2 h-2 rounded-full bg-indigo-400 animate-ping" />
             <span>Active • {elapsedSeconds}s</span>
@@ -85,9 +89,12 @@ export const StageTimeline: React.FC<StageTimelineProps> = ({
       <div className="relative space-y-3 before:absolute before:left-4 before:top-2 before:bottom-2 before:w-0.5 before:bg-slate-800">
         {STAGE_ORDER.map((stageId, index) => {
           const stage = stages[stageId];
-          const isActive = currentStage === stageId || stage?.status === "active";
-          const isCompleted = stage?.status === "completed";
+          const isCompleted =
+            (runStatus === "completed" && stage?.status !== "failed") ||
+            stage?.status === "completed";
           const isFailed = stage?.status === "failed";
+          const isActive =
+            !isFinished && !isCompleted && (currentStage === stageId || stage?.status === "active");
           const isExpanded = !!expandedStages[stageId];
 
           return (

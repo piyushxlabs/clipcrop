@@ -7,6 +7,7 @@ Performs local speech-to-text with word/segment timestamps using in-process fast
 from __future__ import annotations
 
 import asyncio
+import re
 from pathlib import Path
 from typing import Any
 
@@ -35,7 +36,8 @@ def _transcribe_sync(
         start_ms = max(0, int(round(s.start * 1000)))
         end_ms = max(start_ms, int(round(s.end * 1000)))
         text = s.text.strip()
-        if text:
+        # Discard segments with empty text or lone punctuation ('.', ',', '...', etc.)
+        if text and re.sub(r"^[^\w]+$", "", text).strip():
             result_segments.append(
                 TranscriptSegmentModel(start_ms=start_ms, end_ms=end_ms, text=text)
             )

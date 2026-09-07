@@ -141,7 +141,7 @@ def export_crop_path_data(
     """Write a segment's smoothed crop path out as CMX 3600 .edl, .xml, or .json."""
     out_path = Path(input_data.output_path).resolve()
 
-    if ".." in input_data.output_path:
+    if any(part == ".." for part in Path(input_data.output_path).parts):
         return ExportCropPathDataOutput(
             success=False,
             error="output_path must not contain '..' path-traversal sequences.",

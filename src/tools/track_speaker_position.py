@@ -8,19 +8,53 @@ Biometric Privacy Guarantee: Strictly zero landmarks, zero face meshes, zero ide
 from __future__ import annotations
 
 import asyncio
+import json
 from pathlib import Path
 from typing import Any
+
 import mediapipe as mp
 import numpy as np
 
 from src.config import RuntimeConfig
 from src.tools.model_loader import load_face_detector
+from src.tools.subprocess_runner import run_async_subprocess
 from src.tools.schemas.track_speaker_position import (
     BoundingBoxModel,
     FramePositionModel,
     TrackSpeakerPositionInput,
     TrackSpeakerPositionOutput,
 )
+
+
+async def _probe_video_dimensions(ffprobe_path: str, video_path: str) -> tuple[int, int]:
+    """Quickly probe width and height of video file via ffprobe."""
+    ffprobe_bin = str(Path(ffprobe_path).resolve())
+    target_file = str(Path(video_path).resolve())
+    cmd = [
+        ffprobe_bin,
+        "-v",
+        "error",
+        "-select_streams",
+        "v:0",
+        "-show_entries",
+        "stream=width,height",
+        "-of",
+        "json",
+        target_file,
+    ]
+    try:
+        returncode, stdout, _ = await run_async_subprocess(cmd)
+        if returncode == 0 and stdout:
+            data = json.loads(stdout.decode("utf-8", errors="replace"))
+            streams = data.get("streams", [])
+            if streams:
+                w = int(streams[0].get("width", 0))
+                h = int(streams[0].get("height", 0))
+                if w > 0 and h > 0:
+                    return w, h
+    except Exception:
+        pass
+    return 640, 360
 
 
 async def _extract_video_frames(
@@ -31,13 +65,14 @@ async def _extract_video_frames(
     fps: int = 10,
 ) -> tuple[list[np.ndarray], list[int], int, int]:
     """Extract sampled video frames as RGB numpy arrays with millisecond timestamps."""
-    start_sec = start_ms / 1000.0
-    duration_sec = max(0.1, (end_ms - start_ms) / 1000.0)
+    ffmpeg_bin = str(Path(ffmpeg_path).resolve())
+    target_file = str(Path(video_path).resolve())
+    start_sec = max(0.0, start_ms / 1000.0)
+    duration_sec = max(0.1, max(0.0, end_ms - start_ms) / 1000.0)
 
-    # First probe resolution quickly using ffprobe or standard resolution
     # Extract frames at targeted fps to save CPU
     cmd = [
-        ffmpeg_path,
+        ffmpeg_bin,
         "-v",
         "error",
         "-ss",
@@ -45,9 +80,9 @@ async def _extract_video_frames(
         "-t",
         f"{duration_sec:.3f}",
         "-i",
-        video_path,
+        target_file,
         "-vf",
-        f"fps={fps},scale=640:360",  # downscale slightly for fast real-time CPU face detection
+        f"fps={fps},scale=640:360",  # downscale for fast real-time CPU face detection
         "-f",
         "rawvideo",
         "-pix_fmt",
@@ -55,15 +90,10 @@ async def _extract_video_frames(
         "-",
     ]
 
-    proc = await asyncio.create_subprocess_exec(
-        *cmd,
-        stdout=asyncio.subprocess.PIPE,
-        stderr=asyncio.subprocess.PIPE,
-    )
-    stdout, stderr = await proc.communicate()
-    if proc.returncode != 0:
-        err = stderr.decode("utf-8", errors="replace").strip()
-        raise RuntimeError(f"FFmpeg frame extraction failed: {err}")
+    returncode, stdout, stderr = await run_async_subprocess(cmd)
+    if returncode != 0:
+        err = stderr.decode("utf-8", errors="replace").strip() or stdout.decode("utf-8", errors="replace").strip() or f"FFmpeg exited with code {returncode}"
+        raise RuntimeError(f"FFmpeg frame extraction failed (exit {returncode}): {err}")
 
     frame_width = 640
     frame_height = 360
@@ -94,15 +124,34 @@ def _track_frames_sync(
     min_confidence: float,
     frame_width: int,
     frame_height: int,
+    source_width: int | None = None,
+    source_height: int | None = None,
 ) -> tuple[list[FramePositionModel], float]:
-    """Execute MediaPipe BlazeFace detection and tracking across extracted frames."""
+    """Execute MediaPipe BlazeFace detection and tracking across extracted frames.
+    
+    Bounding boxes are scaled from downscaled extraction space (e.g. 640x360) back
+    to full source video coordinate space (e.g. 1280x720).
+    """
     if not frames:
         return [], 0.0
+
+    target_w = source_width if (source_width and source_width > 0) else frame_width
+    target_h = source_height if (source_height and source_height > 0) else frame_height
+    scale_x = float(target_w) / float(frame_width)
+    scale_y = float(target_h) / float(frame_height)
 
     positions: list[FramePositionModel] = []
     sampled_count = 0
     detected_count = 0
     last_box: BoundingBoxModel | None = None
+    last_score: float = 0.0
+
+    default_box = BoundingBoxModel(
+        origin_x=int(round(target_w * 0.35)),
+        origin_y=int(round(target_h * 0.2)),
+        width=int(round(target_w * 0.3)),
+        height=int(round(target_h * 0.5)),
+    )
 
     for idx, (frame, ts) in enumerate(zip(frames, timestamps)):
         is_sampled = (idx % frame_sample_stride == 0) or (idx == len(frames) - 1)
@@ -122,30 +171,26 @@ def _track_frames_sync(
                         best_score = score
                         bb = det.bounding_box
                         best_box = BoundingBoxModel(
-                            origin_x=int(bb.origin_x),
-                            origin_y=int(bb.origin_y),
-                            width=int(bb.width),
-                            height=int(bb.height),
+                            origin_x=int(round(bb.origin_x * scale_x)),
+                            origin_y=int(round(bb.origin_y * scale_y)),
+                            width=int(round(bb.width * scale_x)),
+                            height=int(round(bb.height * scale_y)),
                         )
 
             if best_box is not None and best_score >= min_confidence:
                 detected_count += 1
                 last_box = best_box
+                last_score = round(float(best_score), 3)
                 positions.append(
                     FramePositionModel(
                         timestamp_ms=ts,
                         bounding_box=best_box,
-                        detection_score=round(float(best_score), 3),
+                        detection_score=last_score,
                     )
                 )
             else:
                 # Fallback to last known position or default center box if not detected
-                fallback_box = last_box or BoundingBoxModel(
-                    origin_x=int(frame_width * 0.35),
-                    origin_y=int(frame_height * 0.2),
-                    width=int(frame_width * 0.3),
-                    height=int(frame_height * 0.5),
-                )
+                fallback_box = last_box or default_box
                 positions.append(
                     FramePositionModel(
                         timestamp_ms=ts,
@@ -154,22 +199,21 @@ def _track_frames_sync(
                     )
                 )
         else:
-            # Interpolated frame (score 0.0)
-            fallback_box = last_box or BoundingBoxModel(
-                origin_x=int(frame_width * 0.35),
-                origin_y=int(frame_height * 0.2),
-                width=int(frame_width * 0.3),
-                height=int(frame_height * 0.5),
-            )
+            # Interpolated frame: retain the last valid detection_score instead of emitting 0.0
+            fallback_box = last_box or default_box
             positions.append(
                 FramePositionModel(
                     timestamp_ms=ts,
                     bounding_box=fallback_box,
-                    detection_score=0.0,
+                    detection_score=last_score,
                 )
             )
 
     segment_conf = round(detected_count / max(1, sampled_count), 3)
+    print(
+        f"[Stage 4 Track] Extracted {len(frames)} frames ({frame_width}x{frame_height} -> {target_w}x{target_h}, "
+        f"scale={scale_x:.2f}x{scale_y:.2f}), {sampled_count} sampled, {detected_count} face detections (confidence={segment_conf:.3f})"
+    )
     return positions, segment_conf
 
 
@@ -181,6 +225,8 @@ def _track_frames_process_worker(
     min_confidence: float,
     frame_width: int,
     frame_height: int,
+    source_width: int | None = None,
+    source_height: int | None = None,
 ) -> tuple[list[dict[str, Any]], float]:
     """Worker function executed inside a ProcessPoolExecutor worker process."""
     from src.config import RuntimeConfig
@@ -196,6 +242,8 @@ def _track_frames_process_worker(
         min_confidence,
         frame_width,
         frame_height,
+        source_width,
+        source_height,
     )
     return [p.model_dump() for p in positions], conf
 
@@ -204,6 +252,8 @@ async def track_speaker_position(
     input_data: TrackSpeakerPositionInput,
     config: RuntimeConfig,
     executor: Any | None = None,
+    source_width: int | None = None,
+    source_height: int | None = None,
 ) -> TrackSpeakerPositionOutput:
     """Detect and track the speaker's bounding-box position across one candidate segment."""
     video_path = Path(input_data.video_path)
@@ -212,6 +262,12 @@ async def track_speaker_position(
             success=False,
             error=f"Source video file not found at '{input_data.video_path}'.",
         )
+
+    # Probe source video dimensions if not provided, for coordinate scaling
+    if source_width is None or source_height is None:
+        probed_w, probed_h = await _probe_video_dimensions(config.ffprobe_path, str(video_path))
+        source_width = source_width or probed_w
+        source_height = source_height or probed_h
 
     last_error: str | None = None
     for attempt in range(2):
@@ -235,6 +291,8 @@ async def track_speaker_position(
                     input_data.min_detection_confidence,
                     fw,
                     fh,
+                    source_width,
+                    source_height,
                 )
                 positions = [FramePositionModel.model_validate(p) for p in raw_positions]
             else:
@@ -248,7 +306,13 @@ async def track_speaker_position(
                     input_data.min_detection_confidence,
                     fw,
                     fh,
+                    source_width,
+                    source_height,
                 )
+            print(
+                f"[Stage 4 Track] Segment '{input_data.segment_id}' ({input_data.segment_start_ms}ms-{input_data.segment_end_ms}ms): "
+                f"{len(frames)} frames extracted, {len(positions)} positions returned -> segment_confidence={conf:.3f}"
+            )
 
             return TrackSpeakerPositionOutput(
                 success=True,
@@ -256,7 +320,7 @@ async def track_speaker_position(
                 segment_confidence=conf,
             )
         except Exception as e:
-            last_error = str(e)
+            last_error = str(e) or repr(e)
             if attempt == 0:
                 await asyncio.sleep(0.05)
                 continue
