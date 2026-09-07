@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 20: End-to-End Verification
+- **Last Completed Step:** Step 21: Readiness Check
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -102,7 +102,12 @@
   - Automated live end-to-end verification script (`scripts/verify_e2e_live.py`) exercising complete non-mocked flow (health check, multipart upload, live SSE stream, deliverable download, feedback registration, trace log validation, and sandbox security)
   - Verified paired deliverables: 1080x1920 9:16 vertical MP4 video with synced audio and CMX 3600 non-drop frame EDL
   - Verified local OTel trace log with 3-tier span hierarchy and user feedback annotation
-- **Last Completed Step:** Step 20: End-to-End Verification
-- **Pending Next Step:** Step 21: Readiness Check
+  - Comprehensive readiness audit script (`scripts/readiness_check.py`) validating environment, offline assets, prohibitions, failure simulations, non-negotiables, and frontend build
+  - Verified zero placeholder values across `.env` and `.env.example`
+  - Verified Section 9.5 failure simulations (corrupt media, whisper retry/fallback, cancellation rollback, threshold boundary, micro budget circuit breaker, Pydantic validation)
+  - Verified Section 9.6 non-negotiable requirements (10 candidate hard-cap, 90s time budget, paired deliverables, zero HITL checkpoints, local JSON tracing)
+  - 100% test pass rate across all 84 pytest unit and integration tests
+- **Last Completed Step:** Step 21: Readiness Check
+- **Pending Next Step:** None (All 21 Steps Completed in AGENT_MASTER_PLAN.md — Project Ready)
 - **Known Issues / Blockers:** None
 

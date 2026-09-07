@@ -1,15 +1,15 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 20 COMPLETION CHECKLIST
-# End-to-End Verification
+# STEP 21 COMPLETION CHECKLIST
+# Readiness Check
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run the automated live end-to-end verification script:
+[ ] Run the automated readiness audit script:
     ```
-    uv run python scripts/verify_e2e_live.py
+    uv run python scripts/readiness_check.py
     ```
-    Expected: "ALL STEP 20 END-TO-END VERIFICATION CHECKS PASSED SUCCESSFULLY!"
+    Expected: "ALL STEP 21 READINESS AUDIT CRITERIA SATISFIED! SYSTEM READY."
 
 [ ] Run the full test suite across the entire project:
     ```
@@ -20,28 +20,30 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify delivered vertical clip with ffprobe:
+[ ] Verify zero placeholder strings in .env:
     ```powershell
-    uv run python -c "import subprocess, json; out = subprocess.check_output(['tools/ffmpeg/ffprobe.exe' if Path('tools/ffmpeg/ffprobe.exe').exists() else 'ffprobe', '-v', 'error', '-show_entries', 'stream=width,height', '-of', 'json', str(list(Path('outputs').glob('*_vertical.mp4'))[-1])]); print(json.loads(out))"
+    uv run python -c "from src.config import load_config_from_env; c = load_config_from_env(); print('Config OK:', c.confidence_threshold, c.max_candidates, c.time_budget_seconds)"
     ```
-    Expected: width=1080, height=1920.
+    Expected: Config OK: 0.65 10 90.0
+    If wrong: Check `.env` file for missing or invalid parameters.
 
-[ ] Inspect trace log annotation in outputs/traces:
+[ ] Verify frontend production bundle and verification:
     ```powershell
-    powershell -Command "Get-ChildItem outputs\traces\*_trace.jsonl | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName | Select-Object -Last 2 }"
+    cd frontend; node test_verification.mjs
     ```
-    Expected: User feedback annotation record with rating 'up'.
+    Expected: "ALL STEP 17 VERIFICATION CHECKS PASSED SUCCESSFULLY!"
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `scripts/verify_e2e_live.py` — Automated live end-to-end verification script
-[ ] Feature: Live Multipart Upload & Ingest — Validated 201 response and sandboxed upload persistence
-[ ] Feature: Live SSE Event Stream — Verified wire-line events for all 8 stages and terminal run end
-[ ] Feature: Deliverable Verification — Probed 1080x1920 MP4 vertical clip and CMX 3600 EDL timecodes
-[ ] Feature: User Feedback Pipeline — Confirmed POST /runs/{run_id}/feedback writes to local trace log
-[ ] Feature: Security Sandboxing — Verified path traversal defense and source video immutability
+[ ] File: `scripts/readiness_check.py` — Comprehensive readiness audit script
+[ ] Feature: Zero Placeholder Audit — Verified all paths and configuration variables are fully populated
+[ ] Feature: Perception Assets Health — Validated Faster-Whisper, MediaPipe BlazeFace, Silero VAD, and FFmpeg
+[ ] Feature: Section 8 Prohibitions Audit — Structurally verified all 8 prohibitions (zero cloud APIs, source immutability, biometric privacy, path sandboxing, ephemeral state, gate-bypass impossibility)
+[ ] Feature: Section 9.5 Failure Simulations — Executed all 6 simulated failure scenarios
+[ ] Feature: Section 9.6 Non-Negotiables — Verified loop bounds, time budget, paired deliverables, zero HITL checkpoints, and local OTel tracing
+[ ] Feature: Frontend Build & UI Non-Goals — Verified production bundle and lack of prohibited UI elements
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -49,39 +51,40 @@
 
 Test 1 — Files Exist:
 ```powershell
-powershell -Command "Get-Item scripts/verify_e2e_live.py | Select-Object Name, Length"
+powershell -Command "Get-Item scripts/readiness_check.py | Select-Object Name, Length"
 ```
-✅ Expected: `verify_e2e_live.py` exists and is non-empty.
-❌ If missing: Check git status or restore the file.
+✅ Expected: `readiness_check.py` exists and is non-empty.
+❌ If missing: Restore or recreate `scripts/readiness_check.py`.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import httpx, fastapi, src.main; print('Live verification environment OK')"
+uv run python -c "import src.config, src.main, src.agents.pipeline_controller; print('Python 3.11 Runtime OK')"
 ```
-✅ Expected: `Live verification environment OK`
-❌ If errors: Verify virtual environment with `uv sync`.
+✅ Expected: `Python 3.11 Runtime OK`
+❌ If errors: Verify `.venv` active with `uv sync`.
 
-Test 3 — Live End-to-End Verification:
+Test 3 — Server or Process Start:
 ```powershell
-uv run python scripts/verify_e2e_live.py
+uv run python -c "from src.tools.model_loader import run_model_health_check; from src.config import load_config_from_env; print('Models healthy:', run_model_health_check(load_config_from_env())['all_healthy'])"
 ```
-✅ Expected: 7 checks pass; exits with code 0.
-❌ If errors: Inspect traceback log for endpoint failure.
+✅ Expected: `Models healthy: True`
+❌ If errors: Verify weights exist in `models/`.
 
-Test 4 — Full Regression Suite:
+Test 4 — Functional Check:
+Execute full readiness audit:
 ```powershell
-uv run pytest tests/ -v
+uv run python scripts/readiness_check.py
 ```
-✅ Expected: 84 passed with 0 failures.
-❌ If errors: Check test output log for assertion failures.
+✅ Expected: All 6 audit sections output `[PASS]` and script exits with code 0.
+❌ If wrong: Read the specific failing audit section and inspect local files.
 
 Test 5 — Security Check:
-[ ] Verify .env is in .gitignore:
+[ ] Verify .env is in .gitignore
     ```powershell
-    powershell -Command "Select-String -Path .gitignore -Pattern '\.env'"
+    Select-String -Path .gitignore -Pattern "\.env"
     ```
-    ✅ Expected: `.env` appears in the output.
-    ❌ If missing: Add `.env` to `.gitignore` immediately.
+    ✅ Expected: .env appears in the output
+    ❌ If missing: Add `.env` to .gitignore immediately
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 GIT COMMIT
@@ -89,11 +92,12 @@ Test 5 — Security Check:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ```powershell
-git add . ; git commit -m "Step 20: End-to-End Verification — Live non-mocked flow, deliverables, trace log annotations, and sandbox validation"
+git add .
+git commit -m "Step 21: Readiness Check — Comprehensive readiness audit, failure simulations, and checklist sign-off"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 21 until:
+✋ DO NOT proceed until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

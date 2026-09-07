@@ -281,3 +281,22 @@ Step 5 — No deviations from spec.
 **Impact:**
 - In Step 21 (Readiness Check), the system is fully proven, operational, and ready for final readiness audit and checklist sign-off.
 ---
+
+## Step 21 — Comprehensive Readiness Check & Production Sign-Off
+**Decision:**
+- Automated the entire Section 10 Step 21 readiness check into `scripts/readiness_check.py`, providing a single-command audit covering:
+  - Zero placeholder validation across `.env` and `.env.example`.
+  - Offline perception assets health check and system FFmpeg binaries verification.
+  - Section 8 architectural prohibitions structural audit (zero paid cloud APIs, zero social publishing tools, source video immutability, biometric privacy compliance, path allowlisting, ephemeral state, and gate-bypass impossibility).
+  - All 6 Section 9.5 simulated failure scenarios (corrupt/undecodable media, speech model retry, mid-session cancellation partial file rollback, exact boundary gating `>= 0.65` render vs `< 0.65` skip, micro time budget circuit breaker, and strict Pydantic V2 validation rejection).
+  - All Section 9.6 non-negotiable verification requirements (10 candidate hard-cap, 90s time budget, paired deliverables contract, zero HITL checkpoints, local JSON tracing).
+  - Frontend production build verification (`frontend/dist/index.html`) and UI Non-Goals verification.
+- Ran full regression pytest suite (84 of 84 tests passing) and frontend verification script (21 of 21 checks passing).
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 10 Step 21 and confirms all non-negotiable criteria are met.
+- Validates that the entire ClipCrop engine is 100% locally self-contained, air-gapped, zero-cost, and deterministic.
+
+**Impact:**
+- ClipCrop implementation is complete across all 21 steps defined in `docs/AGENT_MASTER_PLAN.md`. The project is verified, functional, and ready for local production use.
+---

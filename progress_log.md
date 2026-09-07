@@ -658,3 +658,30 @@
 - `uv run python scripts/verify_e2e_live.py` completed with exit code 0; all 7 live verification checks passed.
 - Pass
 ---
+
+## Step 21 — Readiness Check
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Created comprehensive readiness audit script `scripts/readiness_check.py` validating Section 9.5 (all 6 failure scenarios), Section 9.6 (all non-negotiable verification requirements), Section 8 (all 8 architectural prohibitions), environment zero-placeholder audit, offline perception assets, system FFmpeg binaries, and frontend production build.
+- Verified that zero placeholder values exist in `.env` and `.env.example`, all paths are absolute and writable, and numerical thresholds are strictly bounded (`confidence_threshold` = 0.65, `max_candidates` = 10, `time_budget_seconds` = 90).
+- Successfully executed the 6 Section 9.5 simulated failure scenarios (corrupt/undecodable media, whisper retry/fallback, cancellation partial file rollback, exact boundary gating `>= 0.65` render vs `< 0.65` skip, micro time budget circuit breaker, and strict Pydantic V2 validation rejection).
+- Confirmed Section 9.6 non-negotiable requirements (10 candidate hard-cap, 90s time budget, paired deliverables contract, zero HITL approval checkpoints, and local-only newline-delimited JSON OTel span tracing).
+- Verified full test suite execution: all 84 pytest unit and integration tests passed, and all 21 frontend verification checks passed.
+
+**Files Created:**
+- `scripts/readiness_check.py` — Comprehensive readiness audit script covering environment, offline assets, prohibitions, failure scenarios, and non-negotiables.
+
+**Files Modified:**
+- None
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run python scripts/readiness_check.py`: Passed with code 0 (all 6 audit sections passed).
+- `uv run pytest tests/ -v`: 84 passed in 99.04s.
+- `node frontend/test_verification.mjs`: 21 passed with code 0.
+- Pass
+---
