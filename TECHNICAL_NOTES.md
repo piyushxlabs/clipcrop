@@ -225,5 +225,21 @@ Step 5 — No deviations from spec.
 - In Step 18 (Integrate Telemetry & Observability), telemetry spans and feedback annotations recorded from `ClipResultsGrid`'s rating buttons will bind directly to the local trace logs in `CLIPCROP_TRACE_LOG_DIR`.
 ---
 
+## Step 18 — Local OpenTelemetry JSON File Tracing and Post-Hoc Feedback Pipeline
+**Decision:**
+- Implemented `JsonFileSpanExporter` in `src/telemetry/tracing.py` inheriting from `opentelemetry.sdk.trace.export.SpanExporter`. Rather than relying on OTLP network exporters (which require `protobuf>=5` and would conflict with MediaPipe's `protobuf<5` pin), it serializes span records directly to newline-delimited JSON files (`{session_id}_trace.jsonl`) inside `CLIPCROP_TRACE_LOG_DIR` (`outputs/traces/`).
+- Architected `PipelineTracer` to manage the exact 3-tier span hierarchy specified in `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 6:
+  - Root span: `run` (`clipcrop.session_id`, `clipcrop.source.filename`, `clipcrop.run.outcome`).
+  - Stage spans: `stage:<stage_name>` (`clipcrop.stage.name`).
+  - Per-segment / tool spans: `segment:<segment_id>` and `tool:<tool_name>` (`clipcrop.segment.id`, `clipcrop.segment.confidence`, `clipcrop.gate.decision`, `clipcrop.gate.threshold`, `clipcrop.tool.name`, `duration_seconds`, `error.type`).
+- Formatted trace IDs and span IDs as 32-character and 16-character hex strings per OpenTelemetry conventions, capturing Unix nanosecond timestamps.
+- Implemented `src/telemetry/feedback_annotations.py` to support post-hoc user feedback ratings (`up` / `down` and optional note) and emergency stop interruption markers appended directly to `{session_id}_trace.jsonl` without perturbing the single-shot pipeline execution.
+- Connected tracing into `PipelineController` and endpoints in `src/main.py`.
 
+**Reason:**
+- Fulfills `docs/AGENT_MASTER_PLAN.md` Section 10 Step 18 and `docs/INTERFACE_OBSERVABILITY_SYSTEM.md` Section 6 and 7a.
+- Preserves offline, zero-network-telemetry execution without external collector daemons (e.g. Jaeger) while providing industry-standard OTel-compatible span artifacts.
 
+**Impact:**
+- In Step 19 (Run Automated Evaluation Suites) and Step 20 (End-to-End Verification), test runs generate comprehensive, inspectable trace files capturing precise timing, confidence thresholds, and tool executions.
+---

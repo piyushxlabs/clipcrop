@@ -559,4 +559,48 @@
 - Pass
 ---
 
+## Step 18 — Integrate Telemetry & Observability
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented `src/telemetry/tracing.py` providing local-only OpenTelemetry tracing per `INTERFACE_OBSERVABILITY_SYSTEM.md` Section 6:
+  - `JsonFileSpanExporter`: Custom `SpanExporter` inheriting from `opentelemetry.sdk.trace.export.SpanExporter` writing newline-delimited JSON span records to `CLIPCROP_TRACE_LOG_DIR / f"{session_id}_trace.jsonl"`.
+  - `PipelineTracer`: Manages hierarchical span lifecycles (`run` root span -> stage child spans -> per-segment child spans and tool spans) with dedicated `TracerProvider` and `SimpleSpanProcessor` per session.
+  - Hex formatting for 128-bit trace IDs (`format_trace_id`) and 64-bit span IDs (`format_span_id`).
+  - Captured attributes strictly in `clipcrop.*` namespace (`clipcrop.stage.name`, `clipcrop.tool.name`, `clipcrop.segment.id`, `clipcrop.segment.confidence`, `clipcrop.gate.decision`, `clipcrop.gate.threshold`, `duration_seconds`, `error.type`).
+- Implemented `src/telemetry/feedback_annotations.py` per Section 7a:
+  - `append_feedback_annotation`: Appends structured JSON user feedback records (`rating: "up" | "down"`, `note`) to completed run trace logs.
+  - `append_interruption_annotation`: Appends structured cancellation markers on user emergency stops.
+- Integrated tracing into `PipelineController` (`src/agents/pipeline_controller.py`):
+  - Starts root `run` span upon execution start and ends it with terminal reason (`success`, `no_deliverables`, `interrupted`, or `error`).
+  - Traces all 8 sequential stages via `start_stage_span` / `end_stage_span`.
+  - Records tool invocation spans across all local tools (`decode_and_validate_source`, `transcribe_audio`, `detect_speech_pauses`, `score_candidate_segments`, `track_speaker_position`, `confidence_gate_decision`, `smooth_crop_path`, `render_vertical_clip`, `export_crop_path_data`).
+- Integrated feedback and cancellation annotations into FastAPI endpoints in `src/main.py`:
+  - `POST /runs/{run_id}/feedback` invokes `append_feedback_annotation`.
+  - `POST /runs/{run_id}/cancel` invokes `append_interruption_annotation`.
+- Created comprehensive unit test suite in `tests/unit/test_telemetry.py` (5 tests passing in 12.62s).
+- Verified full regression suite: 76 passed in 79.50s with 0 failures.
+
+**Files Created:**
+- `src/telemetry/tracing.py` — OpenTelemetry local JSON file exporter and hierarchical PipelineTracer.
+- `src/telemetry/feedback_annotations.py` — Structured feedback and interruption trace log appenders.
+- `tests/unit/test_telemetry.py` — Telemetry unit test suite (5 tests).
+
+**Files Modified:**
+- `src/telemetry/__init__.py` — Exported tracing utilities and feedback annotation functions.
+- `src/agents/pipeline_controller.py` — Integrated `PipelineTracer` throughout pipeline lifecycle and tool invocations.
+- `src/main.py` — Connected telemetry annotation functions to feedback and cancel endpoints.
+- `progress_log.md` — Appended Step 18 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_telemetry.py -v` passed all 5 tests in 12.62s.
+- `uv run pytest tests/ -v` passed all 76 unit and integration tests across the entire codebase in 79.50s with 0 failures.
+- Pass
+---
+
+
 

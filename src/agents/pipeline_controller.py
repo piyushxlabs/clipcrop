@@ -22,6 +22,7 @@ from typing import Any
 
 from src.config import RuntimeConfig, load_config_from_env
 from src.exceptions import ClipCropError, PermanentFailureError, StateValidationError
+from src.telemetry.tracing import PipelineTracer
 from src.ui.event_types import STAGE_LABELS
 from src.ui.stream_handler import StreamHandler
 from src.state.reducers import apply_state_update
@@ -119,6 +120,8 @@ class PipelineController:
         self._owns_executor = False
         self._final_result: dict[str, Any] | None = None
         self.stream_handler = stream_handler
+        self.trace_file = self.config.trace_log_dir / f"{self.session_id}_trace.jsonl"
+        self.tracer = PipelineTracer(self.session_id, self.trace_file)
 
     def cancel(self) -> None:
         """Signal the pipeline controller to cancel between stages or segments."""
@@ -221,6 +224,8 @@ class PipelineController:
                 self.executor = None
                 self._owns_executor = False
 
+        self.tracer.start_root_span(source_path=str(self.source_video_path))
+
         try:
             for stage in PIPELINE_STAGES_ORDER:
                 self._check_cancellation()
@@ -229,7 +234,13 @@ class PipelineController:
                     label = STAGE_LABELS.get(stage.value, stage.value)
                     await self.stream_handler.emit_stage_start(stage.value, label)
 
-                await self._execute_stage(stage)
+                self.tracer.start_stage_span(stage.value)
+                try:
+                    await self._execute_stage(stage)
+                    self.tracer.end_stage_span(stage.value, success=True)
+                except Exception as stage_exc:
+                    self.tracer.end_stage_span(stage.value, success=False, error_message=str(stage_exc))
+                    raise
 
                 # Time budget circuit breaker check between stages
                 if stage != PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE and self._check_time_budget():
@@ -248,13 +259,21 @@ class PipelineController:
                     await self.stream_handler.emit_stage_start(
                         PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value, label
                     )
-                await self._execute_stage_8_aggregate_and_terminate()
+                self.tracer.start_stage_span(PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value)
+                try:
+                    await self._execute_stage_8_aggregate_and_terminate()
+                    self.tracer.end_stage_span(PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value, success=True)
+                except Exception as s8_exc:
+                    self.tracer.end_stage_span(PipelineStage.STAGE_8_AGGREGATE_AND_TERMINATE.value, success=False, error_message=str(s8_exc))
+                    raise
 
             result = self._final_result or {"status": "completed"}
+            rendered_count = len(self.state.rendered_clips)
+            skipped_count = len(self.state.skipped_segments)
+            reason = "success" if rendered_count > 0 else "no_deliverables"
+            self.tracer.end_root_span(outcome=reason)
+
             if self.stream_handler is not None:
-                rendered_count = len(self.state.rendered_clips)
-                skipped_count = len(self.state.skipped_segments)
-                reason = "success" if rendered_count > 0 else "no_deliverables"
                 await self.stream_handler.emit_run_end(
                     reason=reason,
                     deliverables_count=rendered_count,
@@ -262,8 +281,11 @@ class PipelineController:
                 )
             return result
         except PermanentFailureError as pfe:
+            pfe_str = str(pfe).lower()
+            outcome = "interrupted" if "cancelled" in pfe_str else "error"
+            self.tracer.end_root_span(outcome=outcome)
+
             if self.stream_handler is not None:
-                pfe_str = str(pfe).lower()
                 if "cancelled" in pfe_str:
                     code = "cancelled"
                     reason = "interrupted"
@@ -280,6 +302,7 @@ class PipelineController:
                 await self.stream_handler.emit_run_end(reason=reason)
             raise
         except Exception as exc:
+            self.tracer.end_root_span(outcome="error")
             if self.stream_handler is not None:
                 await self.stream_handler.emit_error("pipeline_error", str(exc), recoverable=False)
                 await self.stream_handler.emit_run_end(reason="error")
@@ -321,6 +344,19 @@ class PipelineController:
             )
 
         out = await decode_and_validate_source(inp, self.config)
+
+        self.tracer.record_tool_span(
+            "decode_and_validate_source",
+            stage_name=PipelineStage.STAGE_1_INGEST_AND_VALIDATE.value,
+            success=out.success,
+            attributes={
+                "clipcrop.duration_seconds": out.duration_seconds,
+                "clipcrop.width": out.width,
+                "clipcrop.height": out.height,
+                "clipcrop.fps": out.fps,
+            },
+            error_message=out.error,
+        )
 
         if self.stream_handler is not None:
             await self.stream_handler.emit_tool_output(
@@ -394,6 +430,21 @@ class PipelineController:
             await self.stream_handler.emit_tool_output(call_id_t, "transcribe_audio", t_res.model_dump())
             await self.stream_handler.emit_tool_output(call_id_v, "detect_speech_pauses", v_res.model_dump())
 
+        self.tracer.record_tool_span(
+            "transcribe_audio",
+            stage_name=PipelineStage.STAGE_2_TRANSCRIBE_AND_SEGMENT.value,
+            success=t_res.success,
+            attributes={"clipcrop.transcript_segments_count": len(t_res.segments or [])},
+            error_message=t_res.error,
+        )
+        self.tracer.record_tool_span(
+            "detect_speech_pauses",
+            stage_name=PipelineStage.STAGE_2_TRANSCRIBE_AND_SEGMENT.value,
+            success=v_res.success,
+            attributes={"clipcrop.speech_spans_count": len(v_res.speech_spans or [])},
+            error_message=v_res.error,
+        )
+
         t_segments = [
             TranscriptSegment(start_ms=s.start_ms, end_ms=s.end_ms, text=s.text)
             for s in (t_res.segments or [])
@@ -428,6 +479,12 @@ class PipelineController:
 
         # Enforce hard cap CLIPCROP_MAX_CANDIDATES
         capped = candidates[: self.config.max_candidates]
+        self.tracer.record_tool_span(
+            "score_candidate_segments",
+            stage_name=PipelineStage.STAGE_3_SCORE_CANDIDATES.value,
+            success=True,
+            attributes={"clipcrop.candidates_count": len(capped)},
+        )
         self.state = apply_state_update(self.state, "candidate_segments", capped)
         if self.stream_handler is not None:
             await self.stream_handler.emit_state_update(
@@ -518,6 +575,18 @@ class PipelineController:
                     )
 
             self.state = apply_state_update(self.state, "tracking_results", tr, key=cand.segment_id)
+            self.tracer.record_tool_span(
+                "track_speaker_position",
+                stage_name=PipelineStage.STAGE_4_TRACK_SPEAKER_POSITION.value,
+                segment_id=cand.segment_id,
+                success=tr.success,
+                attributes={
+                    "clipcrop.segment.id": cand.segment_id,
+                    "clipcrop.segment.confidence": tr.segment_confidence,
+                    "clipcrop.frames_tracked": len(tr.per_frame_positions),
+                },
+                error_message=tr.error,
+            )
             if self.stream_handler is not None:
                 await self.stream_handler.emit_state_update(
                     "tracking_results", "merge-by-key", tr.model_dump(), key=cand.segment_id
@@ -535,6 +604,18 @@ class PipelineController:
                 "confidence_gate_results",
                 decision,
                 key=cand.segment_id,
+            )
+            self.tracer.record_tool_span(
+                "confidence_gate_decision",
+                stage_name=PipelineStage.STAGE_5_CONFIDENCE_GATE.value,
+                segment_id=cand.segment_id,
+                success=True,
+                attributes={
+                    "clipcrop.segment.id": cand.segment_id,
+                    "clipcrop.segment.confidence": decision.tracking_confidence,
+                    "clipcrop.gate.decision": decision.decision,
+                    "clipcrop.gate.threshold": decision.threshold_used,
+                },
             )
             if self.stream_handler is not None:
                 await self.stream_handler.emit_state_update(
@@ -626,6 +707,17 @@ class PipelineController:
                 sp = SmoothedPath(segment_id=cand.segment_id, success=False, error=res.error)
 
             self.state = apply_state_update(self.state, "crop_paths", sp, key=cand.segment_id)
+            self.tracer.record_tool_span(
+                "smooth_crop_path",
+                stage_name=PipelineStage.STAGE_6_SMOOTH_CROP_PATH.value,
+                segment_id=cand.segment_id,
+                success=res.success,
+                attributes={
+                    "clipcrop.segment.id": cand.segment_id,
+                    "clipcrop.keyframes_count": len(res.crop_keyframes or []),
+                },
+                error_message=res.error,
+            )
             if self.stream_handler is not None:
                 await self.stream_handler.emit_state_update(
                     "crop_paths", "merge-by-key", sp.model_dump(), key=cand.segment_id
@@ -691,6 +783,19 @@ class PipelineController:
 
             render_out = await render_vertical_clip(render_in, self.config)
 
+            self.tracer.record_tool_span(
+                "render_vertical_clip",
+                stage_name=PipelineStage.STAGE_7_RENDER_AND_EXPORT.value,
+                segment_id=cand.segment_id,
+                success=render_out.success,
+                attributes={
+                    "clipcrop.segment.id": cand.segment_id,
+                    "clipcrop.output_file": Path(render_out.output_file_path).name if render_out.output_file_path else None,
+                    "clipcrop.duration_seconds": render_out.duration_seconds,
+                },
+                error_message=render_out.error,
+            )
+
             if self.stream_handler is not None:
                 await self.stream_handler.emit_tool_output(
                     call_id_render, "render_vertical_clip", render_out.model_dump()
@@ -736,6 +841,19 @@ class PipelineController:
                 export_out = export_crop_path_data(export_in, self.config)
                 if asyncio.iscoroutine(export_out):
                     export_out = await export_out
+
+                self.tracer.record_tool_span(
+                    "export_crop_path_data",
+                    stage_name=PipelineStage.STAGE_7_RENDER_AND_EXPORT.value,
+                    segment_id=cand.segment_id,
+                    success=export_out.success,
+                    attributes={
+                        "clipcrop.segment.id": cand.segment_id,
+                        "clipcrop.output_file": Path(export_out.output_file_path).name if export_out.output_file_path else None,
+                        "clipcrop.keyframe_count": export_out.keyframe_count,
+                    },
+                    error_message=export_out.error,
+                )
 
                 if self.stream_handler is not None:
                     await self.stream_handler.emit_tool_output(

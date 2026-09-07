@@ -1,59 +1,50 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 17 COMPLETION CHECKLIST
-# Build the Interface Layer & Generative UI Components
+# STEP 18 COMPLETION CHECKLIST
+# Integrate Telemetry & Observability
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run the frontend typecheck to ensure zero TypeScript errors:
-    ```powershell
-    cd A:\Projects\clipcrop\frontend; pnpm exec tsc --noEmit
+[ ] Run the telemetry unit test suite to verify span hierarchy and log outputs:
     ```
-    Expected: Clean exit with zero errors.
+    uv run pytest tests/unit/test_telemetry.py -v
+    ```
+    Expected: 5 tests pass with 0 failures.
 
-[ ] Run the frontend verification script to check all components and UI Non-Goals:
-    ```powershell
-    cd A:\Projects\clipcrop\frontend; node test_verification.mjs
+[ ] Run the entire backend regression test suite:
     ```
-    Expected: "ALL STEP 17 VERIFICATION CHECKS PASSED SUCCESSFULLY!"
+    uv run pytest tests/ -v
+    ```
+    Expected: All 76 tests pass with 0 failures.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Run the production build to ensure Vite bundler succeeds:
-    ```powershell
-    cd A:\Projects\clipcrop\frontend; pnpm run build
+[ ] Verify trace files are produced in the configured directory:
     ```
-    Expected: `dist/index.html` and assets built in <3 seconds without errors.
+    dir outputs\traces
+    ```
+    Expected: JSONL trace files matching `*_trace.jsonl` are present.
 
-[ ] Run the full backend regression test suite to ensure zero regressions:
-    ```powershell
-    cd A:\Projects\clipcrop; uv run pytest tests/ -v
+[ ] Inspect the contents of a generated trace file to verify hierarchical structure and attributes:
     ```
-    Expected: 71 passed with 0 failures.
+    powershell -Command "Get-Content (Get-ChildItem outputs\traces\*_trace.jsonl | Select-Object -Last 1).FullName | Select-Object -First 5"
+    ```
+    Expected: Valid JSON records with `name`, `trace_id`, `span_id`, and attributes in the `clipcrop.*` namespace.
+    If wrong: Ensure `JsonFileSpanExporter` correctly opens the file and flushes before controller completion.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `frontend/src/types/events.ts` — Full TypeScript definitions for all 7 SSE wire events, 12 domain models, and client state.
-[ ] File: `frontend/src/sse/usePipelineStream.ts` — React hook for chunked SSE stream consumption and reducer state updates.
-[ ] File: `frontend/src/sse/mockEvents.ts` — Section 9.1 mock event sequence for instant offline verification.
-[ ] File: `frontend/src/components/SourceVideoCard.tsx` — Validated media track metadata card (Tool 1).
-[ ] File: `frontend/src/components/TranscriptView.tsx` — Timestamp-linked speech transcript list with drawer (Tool 2).
-[ ] File: `frontend/src/components/VadTimeline.tsx` — Horizontal speech/pause timeline bar (Tool 3).
-[ ] File: `frontend/src/components/CandidateRankingTable.tsx` — Ranked candidate table with 4-factor score breakdown.
-[ ] File: `frontend/src/components/ConfidenceBadge.tsx` — Binary render/skip cutoff badge with hover tooltip.
-[ ] File: `frontend/src/components/CropPathChart.tsx` — 2D camera motion path trajectory chart (Tool 5).
-[ ] File: `frontend/src/components/ClipResultsGrid.tsx` — 9:16 HTML5 video player, format downloads (.mp4, .edl, .xml, .json), and feedback controls (Tools 6 & 7).
-[ ] File: `frontend/src/components/StageTimeline.tsx` — Vertical 8-stage progress timeline with expandable tool drawers.
-[ ] File: `frontend/src/components/SystemMessageBanner.tsx` — Error notification banner for permanent failures.
-[ ] File: `frontend/src/components/UploadZone.tsx` — Drag-and-drop video upload and runtime parameter sliders.
-[ ] File: `frontend/src/App.tsx` — Single-page application integrating all generative UI components.
-[ ] File: `frontend/src/index.css` — Modern design system tokens, typography, dark mode, and micro-animations.
-[ ] File: `frontend/index.html` — Semantic HTML entry point with Google Fonts and meta tags.
-[ ] File: `frontend/vite.config.ts` — Vite configuration with backend proxy to `http://127.0.0.1:8000`.
-[ ] File: `frontend/tsconfig.json` — Strict TypeScript compiler configuration.
+[ ] File: `src/telemetry/tracing.py` — OpenTelemetry local `JsonFileSpanExporter` and hierarchical `PipelineTracer`
+[ ] File: `src/telemetry/feedback_annotations.py` — Structured JSON post-hoc feedback ratings (`up`/`down`) and interruption annotations
+[ ] File: `src/telemetry/__init__.py` — Telemetry module exports
+[ ] File: `src/agents/pipeline_controller.py` — Root run span, stage spans, and per-segment/tool span lifecycle tracking
+[ ] File: `src/main.py` — Connected feedback and cancellation endpoints to trace log annotations
+[ ] File: `tests/unit/test_telemetry.py` — Unit test suite verifying span hierarchy, formatting, and trace file persistence
+[ ] Feature: Local OpenTelemetry JSON File Tracing — Newline-delimited JSON span exporter without network daemon overhead
+[ ] Feature: Post-Hoc User Feedback Pipeline — Appends user ratings and notes to completed run traces
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -61,53 +52,40 @@
 
 Test 1 — Files Exist:
 ```powershell
-dir A:\Projects\clipcrop\frontend\src\components\*.tsx
+powershell -Command "Get-Item src/telemetry/tracing.py, src/telemetry/feedback_annotations.py, tests/unit/test_telemetry.py | Select-Object Name, Length"
 ```
-✅ Expected:
-  CandidateRankingTable.tsx
-  ClipResultsGrid.tsx
-  ConfidenceBadge.tsx
-  CropPathChart.tsx
-  SourceVideoCard.tsx
-  StageTimeline.tsx
-  SystemMessageBanner.tsx
-  TranscriptView.tsx
-  UploadZone.tsx
-  VadTimeline.tsx
-❌ If missing: Check `frontend/src/components` and regenerate missing components.
+✅ Expected: `tracing.py`, `feedback_annotations.py`, and `test_telemetry.py` all exist and are non-empty.
+❌ If missing: Check git status or re-create missing module files.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-cd A:\Projects\clipcrop\frontend; pnpm list
+uv run python -c "import opentelemetry.sdk.trace as trace; from src.telemetry.tracing import PipelineTracer, JsonFileSpanExporter; print('Telemetry imports OK')"
 ```
-✅ Expected: ai@6.0.277, react@19.2.8, react-dom@19.2.8, vite@6.4.3, tailwindcss@4.3.3, typescript@5.9.3
-❌ If errors: Run `pnpm install` in `A:\Projects\clipcrop\frontend`.
+✅ Expected: `Telemetry imports OK`
+❌ If errors: Verify virtual environment with `uv sync`.
 
 Test 3 — Server or Process Start:
 ```powershell
-cd A:\Projects\clipcrop\frontend; pnpm run build
+uv run python -c "from src.main import app; print('FastAPI app imports with telemetry OK')"
 ```
-✅ Expected: `dist/index.html` produced cleanly in ~2 seconds.
-❌ If errors: Run `pnpm exec tsc --noEmit` to inspect TypeScript compiler errors.
+✅ Expected: `FastAPI app imports with telemetry OK`
+❌ If errors: Verify imports in `src/main.py` and `src/telemetry/`.
 
 Test 4 — Functional Check:
+Run the telemetry unit tests:
 ```powershell
-cd A:\Projects\clipcrop\frontend; node test_verification.mjs
+uv run pytest tests/unit/test_telemetry.py -v
 ```
-✅ Expected:
-  All files verified.
-  All UI Non-Goals verified: Zero chat threads, thinking tokens, HITL approval modals, or clip retry buttons.
-  Mock events contain all required Vercel AI SDK v6 wire format event types.
-  All Section 4a Generative Components verified.
-❌ If wrong: Review error output and inspect the failing component file.
+✅ Expected: 5 passed in < 15s.
+❌ If wrong: Check test output log for assertion failures or permission issues on `outputs/traces/`.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore:
     ```powershell
-    Get-Content A:\Projects\clipcrop\.gitignore | Select-String "^\.env"
+    powershell -Command "Select-String -Path .gitignore -Pattern '\.env'"
     ```
-    ✅ Expected: `.env` appears in the output
-    ❌ If missing: Add `.env` to `.gitignore` immediately
+    ✅ Expected: `.env` appears in the output.
+    ❌ If missing: Add `.env` to `.gitignore` immediately.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 📦 GIT COMMIT
@@ -116,11 +94,11 @@ Test 5 — Security Check:
 
 ```powershell
 git add .
-git commit -m "Step 17: Build the Interface Layer & Generative UI Components"
+git commit -m "Step 18: Integrate Telemetry & Observability — Local OpenTelemetry JSON file tracing, span hierarchy, and post-hoc feedback pipeline"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 18 until:
+✋ DO NOT proceed to Step 19 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

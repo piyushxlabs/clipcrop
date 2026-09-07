@@ -37,6 +37,10 @@ from pydantic import BaseModel, ConfigDict, Field
 from src.agents.pipeline_controller import PipelineController, PipelineStage
 from src.config import RuntimeConfig, load_config_from_env
 from src.exceptions import ClipCropError, PermanentFailureError
+from src.telemetry.feedback_annotations import (
+    append_feedback_annotation,
+    append_interruption_annotation,
+)
 from src.ui.stream_handler import StreamHandler
 
 logger = logging.getLogger("clipcrop.api")
@@ -335,6 +339,10 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
 
         session.controller.cancel()
         session.status = "cancelled"
+
+        trace_file = runtime_config.trace_log_dir / f"{run_id}_trace.jsonl"
+        append_interruption_annotation(trace_file, run_id=run_id, reason="user_cancellation")
+
         return CancelRunResponse(run_id=run_id, status="cancelling")
 
     @app.post(
@@ -357,20 +365,15 @@ def create_app(config: RuntimeConfig | None = None) -> FastAPI:
         # Record feedback in session memory
         session.feedback[feedback_input.segment_id] = feedback_input.model_dump()
 
-        # Append annotation to local trace log if file exists
+        # Append annotation to local trace log per Section 7a
         trace_file = runtime_config.trace_log_dir / f"{run_id}_trace.jsonl"
-        annotation = {
-            "timestamp": time.time(),
-            "run_id": run_id,
-            "segment_id": feedback_input.segment_id,
-            "rating": feedback_input.rating,
-            "note": feedback_input.note,
-        }
-        try:
-            with open(trace_file, "a", encoding="utf-8") as f:
-                f.write(json.dumps(annotation) + "\n")
-        except Exception as e:
-            logger.warning("Could not write feedback annotation to %s: %s", trace_file, e)
+        append_feedback_annotation(
+            trace_file=trace_file,
+            run_id=run_id,
+            segment_id=feedback_input.segment_id,
+            rating=feedback_input.rating,
+            note=feedback_input.note,
+        )
 
         return FeedbackResponse(
             run_id=run_id,

@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 14: Build Backend API/Server
+- **Last Completed Step:** Step 18: Integrate Telemetry & Observability
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -89,8 +89,14 @@
   - Drag-and-drop video upload zone with runtime tuning sliders (`UploadZone`)
   - Main application layout (`App.tsx`) with dark mode, glassmorphism, micro-animations, and offline mock fixture replay
   - Strict UI Non-Goals adherence (zero chat UI, zero thinking tokens, zero HITL modals, zero clip retry buttons)
-  - Verified production build (`dist/`) and TypeScript typecheck
-- **Last Completed Step:** Step 17: Build the Interface Layer & Generative UI Components
-- **Pending Next Step:** Step 18: Integrate Telemetry & Observability
+  - Local-only OpenTelemetry JSON file span exporter (`src/telemetry/tracing.py`) emitting newline-delimited JSON span records to `{session_id}_trace.jsonl`
+  - Hierarchical trace coordinator (`PipelineTracer`) tracking `run` root span, `stage:<name>` child spans, and per-segment/tool execution spans
+  - Captured telemetry attributes in strict `clipcrop.*` namespace (`clipcrop.stage.name`, `clipcrop.tool.name`, `clipcrop.segment.id`, `clipcrop.segment.confidence`, `clipcrop.gate.decision`, `duration_seconds`)
+  - Trace log user feedback annotations (`src/telemetry/feedback_annotations.py`) recording thumbs-up/down ratings and notes post-hoc
+  - Emergency interruption markers appended to trace logs on session abort
+  - Integration of `PipelineTracer` into `PipelineController` and annotation endpoints in `src/main.py`
+  - Telemetry unit test suite (`tests/unit/test_telemetry.py`) verifying span hierarchy and file exports
+- **Last Completed Step:** Step 18: Integrate Telemetry & Observability
+- **Pending Next Step:** Step 19: Run Automated Evaluation Suites
 - **Known Issues / Blockers:** None
 
