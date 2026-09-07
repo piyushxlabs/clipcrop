@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 19: Run Automated Evaluation Suites
+- **Last Completed Step:** Step 20: End-to-End Verification
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -99,7 +99,10 @@
   - Formal automated evaluation suite (`tests/integration/test_eval_suites.py`) verifying Section 9.2 unit/integration criteria, Section 9.3 deterministic-pipeline criteria, Section 9.4 success criteria, Section 9.5 failure simulations, and Section 9.6 non-negotiable requirements
   - 100% test pass rate across the full 84-test regression suite spanning unit, integration, and safety guardrail suites
   - Validated frontend typecheck, production build (`dist/`), and UI Non-Goals verification
-- **Last Completed Step:** Step 19: Run Automated Evaluation Suites
-- **Pending Next Step:** Step 20: End-to-End Verification
+  - Automated live end-to-end verification script (`scripts/verify_e2e_live.py`) exercising complete non-mocked flow (health check, multipart upload, live SSE stream, deliverable download, feedback registration, trace log validation, and sandbox security)
+  - Verified paired deliverables: 1080x1920 9:16 vertical MP4 video with synced audio and CMX 3600 non-drop frame EDL
+  - Verified local OTel trace log with 3-tier span hierarchy and user feedback annotation
+- **Last Completed Step:** Step 20: End-to-End Verification
+- **Pending Next Step:** Step 21: Readiness Check
 - **Known Issues / Blockers:** None
 

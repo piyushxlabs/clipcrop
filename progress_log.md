@@ -629,5 +629,32 @@
 - `uv run pytest tests/integration/test_eval_suites.py -v` passed all 8 tests in 23.47s.
 - `uv run pytest tests/ -v` passed all 84 tests across the entire codebase in 104.65s with 0 failures.
 - `cd frontend; node test_verification.mjs; pnpm exec tsc --noEmit; pnpm run build` passed all 21 checks, 0 type errors, and built in 905ms.
+---
+
+## Step 20 — End-to-End Verification
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Implemented and executed automated live end-to-end verification script `scripts/verify_e2e_live.py` exercising the complete non-mocked workflow:
+  - Querying `GET /health` responding 200 `healthy`.
+  - Multipart video upload of `tests/fixtures/simple_case.mp4` to `POST /runs`, initializing ephemeral run session.
+  - Consuming live Server-Sent Events (SSE) from `GET /runs/{run_id}/stream`, asserting strictly sequential 8-stage progress (`ingest_and_validate` -> `aggregate_and_terminate`), zero HITL approval gates, and successful completion with 1 deliverable.
+  - Downloading paired deliverables from `GET /outputs/{filename}`: verified vertical MP4 video with `ffprobe` (1080x1920 9:16 vertical resolution, video and audio tracks intact) and CMX 3600 EDL with non-drop frame timecodes.
+  - Registering user feedback rating (`up` and note) via `POST /runs/{run_id}/feedback`.
+  - Verifying local OpenTelemetry trace file `{run_id}_trace.jsonl`: 3-tier span hierarchy (`run` root span, `stage:*` child spans, `tool:*` spans, `clipcrop.*` attributes, and post-hoc user feedback annotation).
+  - Verifying filesystem sandbox security: path traversal attempts rejected (400/404); source fixture video untouched and strictly immutable.
+
+**Files Created:**
+- `scripts/verify_e2e_live.py` — Automated live end-to-end verification script.
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 20 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run python scripts/verify_e2e_live.py` completed with exit code 0; all 7 live verification checks passed.
 - Pass
 ---

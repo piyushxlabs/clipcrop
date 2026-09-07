@@ -262,3 +262,22 @@ Step 5 — No deviations from spec.
 **Impact:**
 - In Step 20 (End-to-End Verification), the system has 100% automated test backing across every single requirement, boundary, and failure mode before running live end-to-end verification.
 ---
+
+## Step 20 — Live End-to-End Flow and Deliverable Verification
+**Decision:**
+- Built and executed `scripts/verify_e2e_live.py` verifying the complete non-mocked flow across the full application surface:
+  - System health verification via `GET /health` responding 200 `healthy`.
+  - Multipart upload of `tests/fixtures/simple_case.mp4` to `POST /runs`, asserting 201 response and sandboxed disk persistence.
+  - Full live Server-Sent Events stream consumption from `GET /runs/{run_id}/stream`: verified wire-line format (`data: <json>\n\n`), strictly sequential 8-stage traversal, zero HITL approval gates, and clean termination.
+  - Deliverable verification via `GET /outputs/{filename}`: confirmed byte integrity and ffprobe validation of delivered vertical clip (1080x1920 9:16 vertical MP4, video and audio tracks intact) and CMX 3600 EDL (non-drop timecodes `00:00:00:00`).
+  - User feedback registration via `POST /runs/{run_id}/feedback` with binary rating (`up`) and note.
+  - Trace log verification: confirmed local JSON file `{run_id}_trace.jsonl` contains 3-tier span hierarchy (`run` root span, `stage:*` child spans, `tool:*` spans, `clipcrop.*` attributes, and appended `user_feedback` record).
+  - Security sandboxing and source immutability verification: confirmed path traversal rejection (400/404) on outputs, and confirmed source fixture file size and modification time remain 100% untouched.
+
+**Reason:**
+- Satisfies `docs/AGENT_MASTER_PLAN.md` Section 10 Step 20 and Section 9.4 ("Agent Is Working" Success Criteria).
+- Proves all architectural components (FastAPI server, async SSE broadcaster, pipeline controller, local perception models, ffmpeg renderer, CMX 3600 serializer, and telemetry tracer) operate seamlessly together in live execution.
+
+**Impact:**
+- In Step 21 (Readiness Check), the system is fully proven, operational, and ready for final readiness audit and checklist sign-off.
+---
