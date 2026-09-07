@@ -602,5 +602,32 @@
 - Pass
 ---
 
+## Step 19 — Run Automated Evaluation Suites
+**Date:** September 7, 2026
+**Status:** Complete
 
+**What was implemented:**
+- Implemented formal automated evaluation suite in `tests/integration/test_eval_suites.py` strictly verifying:
+  - Section 9.2: Python runtime constraint (strictly 3.11.x), system FFmpeg and FFprobe binary health, local perception models offline health check without network egress, and schema parameter parity between Pydantic models and hand-written MCP/JSON schema constants.
+  - Section 9.3: Tool-sequencing correctness verifying strictly sequential 8-stage execution with no skips/loops, and telemetry citation grounding verifying emitted `data-run-end` summary matches `StateSchema` 1:1.
+  - Section 9.4: "Agent Is Working" criteria verifying local OpenTelemetry trace logs with 3-tier span hierarchy (`run` root span, `stage:*` child spans, `tool:*` spans), attributes in `clipcrop.*` namespace, and post-hoc feedback annotations.
+  - Section 9.5: Failure scenario simulations (corrupt media, speech model retry, partial file rollback, confidence threshold boundary, micro time budget circuit breaker, malformed tool output validation).
+  - Section 9.6: Non-negotiable verification requirements (loop bounds hard-capped at 10 candidates, run-wide 90s time budget, all 8 Section 8 prohibitions, zero HITL checkpoints, zero network telemetry).
+- Verified full regression across the entire project test suite: all 84 test cases passing with 0 failures.
+- Verified frontend production bundle and typecheck: TypeScript compiler passed with 0 errors; Vite production build completed in 905ms; `test_verification.mjs` passed all 21 verification checks.
 
+**Files Created:**
+- `tests/integration/test_eval_suites.py` — Formal automated evaluation suite (8 test cases).
+
+**Files Modified:**
+- `progress_log.md` — Appended Step 19 entry.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/integration/test_eval_suites.py -v` passed all 8 tests in 23.47s.
+- `uv run pytest tests/ -v` passed all 84 tests across the entire codebase in 104.65s with 0 failures.
+- `cd frontend; node test_verification.mjs; pnpm exec tsc --noEmit; pnpm run build` passed all 21 checks, 0 type errors, and built in 905ms.
+- Pass
+---

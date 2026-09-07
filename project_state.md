@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 18: Integrate Telemetry & Observability
+- **Last Completed Step:** Step 19: Run Automated Evaluation Suites
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -96,7 +96,10 @@
   - Emergency interruption markers appended to trace logs on session abort
   - Integration of `PipelineTracer` into `PipelineController` and annotation endpoints in `src/main.py`
   - Telemetry unit test suite (`tests/unit/test_telemetry.py`) verifying span hierarchy and file exports
-- **Last Completed Step:** Step 18: Integrate Telemetry & Observability
-- **Pending Next Step:** Step 19: Run Automated Evaluation Suites
+  - Formal automated evaluation suite (`tests/integration/test_eval_suites.py`) verifying Section 9.2 unit/integration criteria, Section 9.3 deterministic-pipeline criteria, Section 9.4 success criteria, Section 9.5 failure simulations, and Section 9.6 non-negotiable requirements
+  - 100% test pass rate across the full 84-test regression suite spanning unit, integration, and safety guardrail suites
+  - Validated frontend typecheck, production build (`dist/`), and UI Non-Goals verification
+- **Last Completed Step:** Step 19: Run Automated Evaluation Suites
+- **Pending Next Step:** Step 20: End-to-End Verification
 - **Known Issues / Blockers:** None
 

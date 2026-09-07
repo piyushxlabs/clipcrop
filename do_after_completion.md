@@ -1,50 +1,47 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 18 COMPLETION CHECKLIST
-# Integrate Telemetry & Observability
+# STEP 19 COMPLETION CHECKLIST
+# Run Automated Evaluation Suites
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Run the telemetry unit test suite to verify span hierarchy and log outputs:
+[ ] Run the new evaluation test suite:
     ```
-    uv run pytest tests/unit/test_telemetry.py -v
+    uv run pytest tests/integration/test_eval_suites.py -v
     ```
-    Expected: 5 tests pass with 0 failures.
+    Expected: All 8 evaluation tests pass with 0 failures.
 
-[ ] Run the entire backend regression test suite:
+[ ] Run the full regression test suite across the entire project:
     ```
     uv run pytest tests/ -v
     ```
-    Expected: All 76 tests pass with 0 failures.
+    Expected: All 84 tests pass with 0 failures.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Verify trace files are produced in the configured directory:
+[ ] Run frontend verification script and build:
+    ```powershell
+    cd frontend; node test_verification.mjs; pnpm exec tsc --noEmit; pnpm run build
     ```
-    dir outputs\traces
-    ```
-    Expected: JSONL trace files matching `*_trace.jsonl` are present.
+    Expected: 21 checks pass, 0 type errors, production bundle built cleanly in < 2 seconds.
 
-[ ] Inspect the contents of a generated trace file to verify hierarchical structure and attributes:
+[ ] Verify trace logs exist and contain valid evaluation spans:
+    ```powershell
+    powershell -Command "Get-ChildItem outputs\traces\*_trace.jsonl | Select-Object -Last 1 | ForEach-Object { Get-Content $_.FullName | Select-Object -First 3 }"
     ```
-    powershell -Command "Get-Content (Get-ChildItem outputs\traces\*_trace.jsonl | Select-Object -Last 1).FullName | Select-Object -First 5"
-    ```
-    Expected: Valid JSON records with `name`, `trace_id`, `span_id`, and attributes in the `clipcrop.*` namespace.
-    If wrong: Ensure `JsonFileSpanExporter` correctly opens the file and flushes before controller completion.
+    Expected: JSON records with trace_id, span_id, and clipcrop.* attributes.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/telemetry/tracing.py` — OpenTelemetry local `JsonFileSpanExporter` and hierarchical `PipelineTracer`
-[ ] File: `src/telemetry/feedback_annotations.py` — Structured JSON post-hoc feedback ratings (`up`/`down`) and interruption annotations
-[ ] File: `src/telemetry/__init__.py` — Telemetry module exports
-[ ] File: `src/agents/pipeline_controller.py` — Root run span, stage spans, and per-segment/tool span lifecycle tracking
-[ ] File: `src/main.py` — Connected feedback and cancellation endpoints to trace log annotations
-[ ] File: `tests/unit/test_telemetry.py` — Unit test suite verifying span hierarchy, formatting, and trace file persistence
-[ ] Feature: Local OpenTelemetry JSON File Tracing — Newline-delimited JSON span exporter without network daemon overhead
-[ ] Feature: Post-Hoc User Feedback Pipeline — Appends user ratings and notes to completed run traces
+[ ] File: `tests/integration/test_eval_suites.py` — Formal automated evaluation suite (8 tests)
+[ ] Feature: CI Tool Parameter Parity Diff — Automated reflection check diffing Pydantic V2 models vs JSON schema properties
+[ ] Feature: Tool-Sequencing Correctness Verification — Strict sequential 8-stage execution validation
+[ ] Feature: Telemetry Grounding Verification — 1:1 state-to-event summary grounding check
+[ ] Feature: Non-Negotiable Requirements Enforcement — Loop bounds (10 candidate cap), 90s time budget, failure mappings
+[ ] Test Suite: 84 of 84 automated tests passing across unit, integration, safety guardrails, and evaluation suites
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -52,32 +49,31 @@
 
 Test 1 — Files Exist:
 ```powershell
-powershell -Command "Get-Item src/telemetry/tracing.py, src/telemetry/feedback_annotations.py, tests/unit/test_telemetry.py | Select-Object Name, Length"
+powershell -Command "Get-Item tests/integration/test_eval_suites.py | Select-Object Name, Length"
 ```
-✅ Expected: `tracing.py`, `feedback_annotations.py`, and `test_telemetry.py` all exist and are non-empty.
-❌ If missing: Check git status or re-create missing module files.
+✅ Expected: `test_eval_suites.py` exists and is non-empty.
+❌ If missing: Check git status or restore the file.
 
 Test 2 — Environment / Dependencies:
 ```powershell
-uv run python -c "import opentelemetry.sdk.trace as trace; from src.telemetry.tracing import PipelineTracer, JsonFileSpanExporter; print('Telemetry imports OK')"
+uv run python -c "import pytest, torch, mediapipe, faster_whisper; print('Evaluation test environment OK')"
 ```
-✅ Expected: `Telemetry imports OK`
+✅ Expected: `Evaluation test environment OK`
 ❌ If errors: Verify virtual environment with `uv sync`.
 
-Test 3 — Server or Process Start:
+Test 3 — Evaluation Suite Execution:
 ```powershell
-uv run python -c "from src.main import app; print('FastAPI app imports with telemetry OK')"
+uv run pytest tests/integration/test_eval_suites.py -v
 ```
-✅ Expected: `FastAPI app imports with telemetry OK`
-❌ If errors: Verify imports in `src/main.py` and `src/telemetry/`.
+✅ Expected: 8 passed in ~25s.
+❌ If errors: Inspect pytest failure log.
 
-Test 4 — Functional Check:
-Run the telemetry unit tests:
+Test 4 — Full Regression Suite:
 ```powershell
-uv run pytest tests/unit/test_telemetry.py -v
+uv run pytest tests/ -v
 ```
-✅ Expected: 5 passed in < 15s.
-❌ If wrong: Check test output log for assertion failures or permission issues on `outputs/traces/`.
+✅ Expected: 84 passed in ~105s with 0 failures.
+❌ If errors: Check test output log for assertion failures.
 
 Test 5 — Security Check:
 [ ] Verify .env is in .gitignore:
@@ -93,12 +89,11 @@ Test 5 — Security Check:
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ```powershell
-git add .
-git commit -m "Step 18: Integrate Telemetry & Observability — Local OpenTelemetry JSON file tracing, span hierarchy, and post-hoc feedback pipeline"
+git add . ; git commit -m "Step 19: Run Automated Evaluation Suites — Formal evaluation matrix, determinism regression, and non-negotiable verification"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 19 until:
+✋ DO NOT proceed to Step 20 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully
