@@ -1,17 +1,17 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-# STEP 23 COMPLETION CHECKLIST
-# Hormozi-Style Highlighted Captions, Offline Viral Metadata, Peak Cover Art & 1-Click ZIP Creator Bundle
+# STEP 25 COMPLETION CHECKLIST
+# Native Word Timestamps & Audio-Subtitle Desync Elimination
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
 ⏰ BEFORE running the next prompt — do these first:
 
-[ ] Verify the backend and frontend dev servers are running:
+[ ] Verify the backend server is running and healthy:
     ```powershell
-    uv run uvicorn src.main:app --host 127.0.0.1 --port 8000 --reload
+    uv run python -c "import urllib.request; print(urllib.request.urlopen('http://127.0.0.1:8000/health').read().decode())"
     ```
-    Expected: Application startup complete, Uvicorn running on http://127.0.0.1:8000.
+    Expected: {"status":"healthy","version":"0.1.0"}
 
-[ ] In another terminal, ensure the Vite dev server is running:
+[ ] Verify the frontend Vite dev server is running:
     ```powershell
     cd frontend && pnpm run dev
     ```
@@ -20,38 +20,35 @@
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ⏰ AFTER code was generated — do these now:
 
-[ ] Run the full automated pytest suite:
+[ ] Run unit tests for native word timestamps and VAD fallback:
+    ```powershell
+    uv run pytest tests/unit/test_tools.py -k "test_export_subtitles" -v
+    ```
+    Expected: 4 passed in <5s.
+
+[ ] Run full regression pytest suite:
     ```powershell
     uv run pytest tests/ -v
     ```
-    Expected: 91 passed in ~85s with 0 failures.
-    If wrong: Check test failure output and verify local perception assets in `models/`.
+    Expected: 94 passed in ~100s with 0 failures.
+    If wrong: Check test output to isolate any failing fixture or tool.
 
-[ ] Run live upload test to generate a full Creator Pack bundle:
+[ ] Run live upload pipeline test:
     ```powershell
     uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4
     ```
-    Expected: All 8 stages complete, yielding vertical MP4, EDL, XML, JSON, SRT, ASS, JPG, metadata JSON, and master ZIP.
-
-[ ] Verify master ZIP Creator Pack contents and metadata:
-    ```powershell
-    uv run python -c "import zipfile, glob; zips = glob.glob('outputs/*_complete_pack.zip'); z = zipfile.ZipFile(zips[-1]); print(z.namelist())"
-    ```
-    Expected: List containing `.mp4`, `.edl`, `.xml`, `.json`, `.srt`, `.jpg`, and `README_METADATA.txt`.
+    Expected: Complete 8-stage run finishing with 1 rendered deliverable, word-synchronized subtitles, and complete creator pack ZIP.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 ✅ WHAT GOT BUILT THIS STEP
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 
-[ ] File: `src/tools/export_subtitles.py` — Added kinetic ASS subtitle generator with Hormozi-style vibrant yellow active-word highlight (`{\c&H0000FFFF&}`), bold text, black outline, and configurable word chunks.
-[ ] File: `src/tools/schemas/render_vertical_clip.py` — Updated schema with `burn_subtitles` and `subtitles_path` parameters maintaining 100% Pydantic V2 and JSON schema parity.
-[ ] File: `src/tools/render_vertical_clip.py` — Injected FFmpeg `subtitles` filter with Windows path colon escaping and defensive fallback to clean video.
-[ ] File: `src/tools/extract_thumbnail.py` — Standalone peak detection score cover thumbnail extraction during active speech intervals.
-[ ] File: `src/tools/generate_clip_metadata.py` — 100% offline heuristic viral hook, 3 title variants, and 5 hashtags engine saved to `_metadata.json`.
-[ ] File: `src/tools/bundle_deliverables.py` — 1-click master ZIP archive builder packaging all clip deliverables and README.
-[ ] File: `src/agents/pipeline_controller.py` — Wired subtitle generation, burned subtitles, thumbnail, viral metadata, and ZIP bundling into Stage 7 with comprehensive cancellation cleanup.
-[ ] File: `src/main.py` — Added MIME mappings for `application/zip` (`.zip`) and `text/x-ssa` (`.ass`).
-[ ] File: `frontend/src/components/ClipResultsGrid.tsx` — Added poster thumbnail display, viral hook banner, copy title & tags button, and master `[📦 Download Complete Creator Pack (.ZIP)]` button.
+[ ] File: `src/state/schema.py` — Added `TranscriptWord` model (`word`, `start_ms`, `end_ms`, `probability`) and added `words: list[TranscriptWord]` to `TranscriptSegment`.
+[ ] File: `src/tools/schemas/transcribe_audio.py` — Added `TranscriptWordModel` and `words: list[TranscriptWordModel]` to `TranscriptSegmentModel`, maintaining 100% parameter parity across Pydantic models and MCP JSON schemas.
+[ ] File: `src/tools/transcribe_audio.py` — Passed `word_timestamps=True` to `model.transcribe()` and populated `words` in output segment objects.
+[ ] File: `src/agents/pipeline_controller.py` — Mapped transcribed words into `TranscriptSegment` in Stage 2, and passed `speech_spans=self.state.vad_segments` to subtitle exporters in Stage 7.
+[ ] File: `src/tools/export_subtitles.py` — Updated `_extract_timed_words` to prioritize native word timestamps, filter boundary words against candidate segment bounds, shift offsets relative to `segment_start_ms`, blank screen during intro silence, and apply Silero VAD speech span fallback clamping when word timestamps are absent.
+[ ] File: `tests/unit/test_tools.py` — Added unit tests `test_export_subtitles_native_word_timestamps` and `test_export_subtitles_vad_fallback_guardrail`.
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
 🧪 TESTING & VERIFICATION
@@ -59,33 +56,34 @@
 
 Test 1 — Files Exist:
 ```powershell
-Get-ChildItem -Path src/tools/export_subtitles.py, src/tools/extract_thumbnail.py, src/tools/generate_clip_metadata.py, src/tools/bundle_deliverables.py
+Get-ChildItem -Path src/state/schema.py, src/tools/schemas/transcribe_audio.py, src/tools/transcribe_audio.py, src/tools/export_subtitles.py, src/agents/pipeline_controller.py, tests/unit/test_tools.py
 ```
-✅ Expected: All 4 tool files exist and are non-empty.
-❌ If missing: Restore or recreate the tool implementations from git.
+✅ Expected: All 6 files exist and are verified.
+❌ If missing: Restore from git.
 
-Test 2 — Environment / Dependencies:
+Test 2 — Word-Level Subtitle Unit Tests:
 ```powershell
-uv run pytest tests/unit/test_tools.py -k "test_export_ass_subtitles_formatting or test_generate_clip_metadata or test_create_deliverables_bundle" -v
+uv run pytest tests/unit/test_tools.py -k "test_export_subtitles" -v
 ```
-✅ Expected: 3 passed in <5s.
-❌ If errors: Verify `src/tools/export_subtitles.py` and `generate_clip_metadata.py`.
+✅ Expected: 4 passed.
+❌ If errors: Verify `_extract_timed_words` in `src/tools/export_subtitles.py`.
 
 Test 3 — Full Regression Test Suite:
 ```powershell
 uv run pytest tests/ -v
 ```
-✅ Expected: 91 passed in ~85s.
-❌ If errors: Run `uv run pytest tests/unit/test_tools.py -v` to isolate failing component.
+✅ Expected: 94 passed in ~100s.
+❌ If errors: Run `uv run pytest tests/unit/test_tools.py -v` to isolate.
 
-Test 4 — Functional UI Check:
-1. Open http://localhost:5173/ in the browser.
-2. Upload a test video or inspect rendered clip results.
-3. Observe the cover poster thumbnail, the yellow "VIRAL HOOK" badge, the "📋 Copy Title & Tags" button, and the green "📦 Download Complete Creator Pack (.ZIP)" button.
-✅ Expected: Video plays with crisp, centered framing; clicking the ZIP button downloads the complete creator bundle.
-❌ If wrong: Check browser console (F12) for network errors or unbuilt assets.
+Test 4 — Functional Verification:
+1. Open the ClipCrop web app at `http://localhost:5173/`.
+2. Upload a video containing leading silence/music or speech with pauses.
+3. Observe the rendered 9:16 clip playback.
+4. Verify that subtitles do NOT appear during intro silence/music before speech, appear precisely when words are spoken with yellow word highlighting, and disappear during long speech pauses.
+✅ Expected: Subtitle onset matches spoken words 1:1 with zero premature black-screen captions.
+❌ If wrong: Inspect `outputs/{run_id}_{segment_id}_subtitles.ass` for initial `Dialogue:` start time.
 
-Test 5 — Security & Output Sandboxing Check:
+Test 5 — Security & Sandboxing Check:
 [ ] Verify .env is in .gitignore:
     ```powershell
     Select-String -Path .gitignore -Pattern "\.env"
@@ -100,11 +98,11 @@ Test 5 — Security & Output Sandboxing Check:
 
 ```powershell
 git add .
-git commit -m "Step 23: Hormozi-Style Captions & Creator Pack Bundle — Dynamic highlighted subtitles, viral metadata, and 1-click ZIP pack"
+git commit -m "Step 25: Native Word Timestamps & Audio-Subtitle Desync Elimination — Exact word-accurate captions"
 ```
 
 ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━
-✋ DO NOT proceed to Step 24 until:
+✋ DO NOT proceed to Step 26 until:
 [ ] All tests above show ✅
 [ ] Git commit is done
 [ ] You have read do_after_completion.md fully

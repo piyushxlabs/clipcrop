@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 22: Auto-Generated Subtitles (.SRT) & Smart Peak Thumbnail Extraction
+- **Last Completed Step:** Step 25: Native Word Timestamps & Audio-Subtitle Desync Elimination
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -118,10 +118,15 @@
   - Stage 7 pipeline controller integration with defensive execution and comprehensive rollback cleanup
   - Deliverable downloads for `.zip` (`application/zip`) and `.ass` (`text/x-ssa`) in `GET /outputs/{filename}`
   - Frontend dashboard enhancement with thumbnail preview, viral hook banner, copy title & tags helper, and master `[📦 Download Complete Creator Pack (.ZIP)]` button
-  - 100% test pass rate across all 91 pytest unit, integration, and guardrail tests
-- **Last Completed Step:** Step 23: Hormozi-Style Highlighted Captions, Offline Viral Metadata, Peak Cover Art & 1-Click ZIP Creator Bundle
+  - Subtitle timestamp offset shifting relative to `segment_start_ms` with zero-clamping and boundary word filtering (`src/tools/export_subtitles.py`)
+  - Native Faster-Whisper word timestamps extraction (`word_timestamps=True`) with strict Pydantic V2 modeling (`TranscriptWord`, `TranscriptWordModel`) in state and schemas
+  - Word-level precise subtitle generation with kinetic active word highlighting (`{\c&H0000FFFF&}`), zero premature captions during intro silence/music, and blank screen handling
+  - Silero VAD speech span fallback guardrail clamping subtitle display when word timestamps are absent
+  - 100% test pass rate across all 94 pytest unit, integration, and guardrail tests
+- **Last Completed Step:** Step 25: Native Word Timestamps & Audio-Subtitle Desync Elimination
 - **Pending Next Step:** None (All features and enhancements complete — Engine Fully Operational)
 - **Known Issues / Blockers:** None
+
 
 
 

@@ -553,6 +553,122 @@ def test_export_ass_subtitles_formatting(tmp_path: Path) -> None:
     assert out_file.read_text(encoding="utf-8") == ass_content
 
 
+def test_export_subtitles_intro_silence_offset_shifting(tmp_path: Path) -> None:
+    """Assert subtitles shift timestamps relative to segment_start_ms, eliminating black-screen text."""
+    from src.tools.export_subtitles import (
+        export_ass_subtitles,
+        export_subtitles,
+        generate_ass_content,
+        generate_srt_content,
+    )
+
+    # Candidate segment spans 10.0s to 20.0s (10000ms to 20000ms)
+    # Speech begins at 12.5s (12500ms) - i.e. 2.5s of visual intro/silence
+    transcripts = [
+        TranscriptSegment(start_ms=12500, end_ms=16000, text="Intro speech delayed"),
+    ]
+
+    # SRT verification: should start at 00:00:02,500, NOT 00:00:00,000
+    srt = generate_srt_content(10000, 20000, transcripts)
+    assert "00:00:02,500 --> 00:00:06,000" in srt
+    assert "00:00:00,000" not in srt
+
+    # ASS verification: dialogue lines must start at 0:00:02.50, NOT 0:00:00.00
+    ass = generate_ass_content(10000, 20000, transcripts)
+    assert "Dialogue: 0,0:00:00.00" not in ass
+    assert "0:00:02.50" in ass
+
+    # Test file writing with keyword argument segment_start_ms
+    srt_file = tmp_path / "delayed.srt"
+    ass_file = tmp_path / "delayed.ass"
+    assert export_subtitles(
+        segment_start_ms=10000,
+        segment_end_ms=20000,
+        transcript_segments=transcripts,
+        output_path=srt_file,
+    ) is True
+    assert export_ass_subtitles(
+        segment_start_ms=10000,
+        segment_end_ms=20000,
+        transcript_segments=transcripts,
+        output_path=ass_file,
+    ) is True
+    assert "00:00:02,500" in srt_file.read_text(encoding="utf-8")
+    assert "0:00:02.50" in ass_file.read_text(encoding="utf-8")
+
+
+def test_export_subtitles_native_word_timestamps(tmp_path: Path) -> None:
+    """Assert subtitle generation uses exact word-level timestamps when available."""
+    from src.state.schema import TranscriptSegment, TranscriptWord
+    from src.tools.export_subtitles import (
+        export_ass_subtitles,
+        export_subtitles,
+        generate_ass_content,
+        generate_srt_content,
+    )
+
+    # Candidate segment spans 0ms to 10000ms.
+    # Utterance segment has start_ms=0, but actual words begin at 5570ms!
+    words = [
+        TranscriptWord(word="Hey", start_ms=5570, end_ms=5900),
+        TranscriptWord(word="everybody", start_ms=5900, end_ms=6500),
+        TranscriptWord(word="welcome", start_ms=6500, end_ms=7100),
+    ]
+    transcripts = [
+        TranscriptSegment(
+            start_ms=0,
+            end_ms=8000,
+            text="Hey everybody welcome",
+            words=words,
+        ),
+    ]
+
+    # ASS subtitles must NOT display any dialogue lines between 0:00:00.00 and 0:00:05.57
+    ass = generate_ass_content(0, 10000, transcripts)
+    assert "0:00:05.57" in ass
+    assert "0:00:00.00" not in ass
+    assert "{\\c&H0000FFFF&}HEY{\\c&H00FFFFFF&}" in ass
+
+    # SRT subtitles must start at 00:00:05,570
+    srt = generate_srt_content(0, 10000, transcripts)
+    assert "00:00:05,570" in srt
+    assert "00:00:00,000" not in srt
+
+    out_ass = tmp_path / "word_exact.ass"
+    assert export_ass_subtitles(
+        segment_start_ms=0,
+        segment_end_ms=10000,
+        transcript_segments=transcripts,
+        output_path=out_ass,
+    ) is True
+    assert "0:00:05.57" in out_ass.read_text(encoding="utf-8")
+
+
+def test_export_subtitles_vad_fallback_guardrail(tmp_path: Path) -> None:
+    """Assert VAD speech spans clamp speech onset when word timestamps are absent."""
+    from src.state.schema import SpeechSpan, TranscriptSegment
+    from src.tools.export_subtitles import generate_ass_content, generate_srt_content
+
+    # Candidate spans 0ms to 10000ms. Transcript says start_ms=0, but VAD detected speech only from 4.0s
+    transcripts = [
+        TranscriptSegment(start_ms=0, end_ms=8000, text="Intro music then speech"),
+    ]
+    vad_spans = [
+        SpeechSpan(start_seconds=4.0, end_seconds=8.0),
+    ]
+
+    ass = generate_ass_content(0, 10000, transcripts, speech_spans=vad_spans)
+    # The dialogue events must NOT start at 0:00:00.00; they must start at or after 0:00:04.00
+    assert "Dialogue: 0,0:00:00.00" not in ass
+    assert "0:00:04.00" in ass
+
+    srt = generate_srt_content(0, 10000, transcripts, speech_spans=vad_spans)
+    assert "00:00:04,000" in srt
+    assert "00:00:00,000" not in srt
+
+
+
+
 def test_generate_clip_metadata(tmp_path: Path) -> None:
     """Assert viral metadata engine generates opening hook, 3 titles, and 5 hashtags."""
     from src.tools.generate_clip_metadata import generate_clip_metadata

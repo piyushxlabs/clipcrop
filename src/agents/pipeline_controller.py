@@ -40,6 +40,7 @@ from src.state.schema import (
     StateSchema,
     TrackingResult,
     TranscriptSegment,
+    TranscriptWord,
 )
 from src.tools.candidate_scorer import score_candidate_segments
 from src.tools.confidence_gate import confidence_gate_decision
@@ -451,7 +452,20 @@ class PipelineController:
         )
 
         t_segments = [
-            TranscriptSegment(start_ms=s.start_ms, end_ms=s.end_ms, text=s.text)
+            TranscriptSegment(
+                start_ms=s.start_ms,
+                end_ms=s.end_ms,
+                text=s.text,
+                words=[
+                    TranscriptWord(
+                        word=w.word,
+                        start_ms=w.start_ms,
+                        end_ms=w.end_ms,
+                        probability=w.probability,
+                    )
+                    for w in getattr(s, "words", [])
+                ],
+            )
             for s in (t_res.segments or [])
         ]
         v_spans = [
@@ -771,9 +785,27 @@ class PipelineController:
 
             # Pre-generate subtitles so they can be burned into the vertical video
             try:
-                export_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_srt_path)
-                export_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_srt_crop_path)
-                export_ass_subtitles(cand.start_ms, cand.end_ms, self.state.transcript_segments, out_ass_path)
+                export_subtitles(
+                    segment_start_ms=cand.start_ms,
+                    segment_end_ms=cand.end_ms,
+                    transcript_segments=self.state.transcript_segments,
+                    output_path=out_srt_path,
+                    speech_spans=self.state.vad_segments,
+                )
+                export_subtitles(
+                    segment_start_ms=cand.start_ms,
+                    segment_end_ms=cand.end_ms,
+                    transcript_segments=self.state.transcript_segments,
+                    output_path=out_srt_crop_path,
+                    speech_spans=self.state.vad_segments,
+                )
+                export_ass_subtitles(
+                    segment_start_ms=cand.start_ms,
+                    segment_end_ms=cand.end_ms,
+                    transcript_segments=self.state.transcript_segments,
+                    output_path=out_ass_path,
+                    speech_spans=self.state.vad_segments,
+                )
             except Exception:
                 pass
 

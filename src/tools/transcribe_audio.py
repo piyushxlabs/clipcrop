@@ -17,6 +17,7 @@ from src.tools.schemas.transcribe_audio import (
     TranscribeAudioInput,
     TranscribeAudioOutput,
     TranscriptSegmentModel,
+    TranscriptWordModel,
 )
 
 
@@ -30,6 +31,7 @@ def _transcribe_sync(
         audio_path,
         language=language,
         vad_filter=False,  # VAD is handled independently by Silero VAD (Tool 3)
+        word_timestamps=True,
     )
     result_segments: list[TranscriptSegmentModel] = []
     for s in segments_gen:
@@ -38,8 +40,26 @@ def _transcribe_sync(
         text = s.text.strip()
         # Discard segments with empty text or lone punctuation ('.', ',', '...', etc.)
         if text and re.sub(r"^[^\w]+$", "", text).strip():
+            words_data: list[TranscriptWordModel] = []
+            if hasattr(s, "words") and s.words:
+                for w in s.words:
+                    w_text = w.word.strip()
+                    if w_text:
+                        words_data.append(
+                            TranscriptWordModel(
+                                word=w_text,
+                                start_ms=max(0, int(round(w.start * 1000))),
+                                end_ms=max(0, int(round(w.end * 1000))),
+                                probability=getattr(w, "probability", None),
+                            )
+                        )
             result_segments.append(
-                TranscriptSegmentModel(start_ms=start_ms, end_ms=end_ms, text=text)
+                TranscriptSegmentModel(
+                    start_ms=start_ms,
+                    end_ms=end_ms,
+                    text=text,
+                    words=words_data,
+                )
             )
     detected_lang = getattr(info, "language", language) or language
     return result_segments, detected_lang

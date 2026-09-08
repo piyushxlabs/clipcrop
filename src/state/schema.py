@@ -34,6 +34,17 @@ class FileRef(BaseModel):
     format: str | None = Field(default=None, description="File format identifier (e.g. mp4, edl, xml, json).")
 
 
+class TranscriptWord(BaseModel):
+    """Word-level timing information."""
+
+    model_config = ConfigDict(strict=True)
+
+    word: str = Field(..., description="Individual word token.")
+    start_ms: int = Field(..., ge=0, description="Word start offset in milliseconds.")
+    end_ms: int = Field(..., ge=0, description="Word end offset in milliseconds.")
+    probability: float | None = Field(default=None, description="Confidence probability of word.")
+
+
 class TranscriptSegment(BaseModel):
     """Timestamped speech transcript segment."""
 
@@ -42,6 +53,8 @@ class TranscriptSegment(BaseModel):
     start_ms: int = Field(..., ge=0, description="Segment start offset in milliseconds.")
     end_ms: int = Field(..., ge=0, description="Segment end offset in milliseconds.")
     text: str = Field(..., description="Transcribed text content.")
+    words: list[TranscriptWord] = Field(default_factory=list, description="Word-level timestamps.")
+
 
 
 class SpeechSpan(BaseModel):

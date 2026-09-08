@@ -336,3 +336,35 @@ Step 5 — No deviations from spec.
 **Impact:**
 - Users can immediately export burned-caption vertical shorts, preview with peak cover art, copy viral metadata to clipboard, or download complete ZIP packages for DaVinci Resolve, Premiere Pro, or Final Cut Pro.
 ---
+## Step 24 — Subtitle Timestamp Shifting and Intro Silence Alignment
+**Decision:**
+- Shifted all word and segment subtitle timestamps relative to `segment_start_ms`: `rel_start = max(0, abs_w_start - segment_start_ms)`.
+- Implemented boundary word filtering in `_extract_timed_words` to drop words concluding prior to `segment_start_ms` or starting after `segment_end_ms`.
+- Allowed flexible `export_subtitles` and `export_ass_subtitles` parameter signatures supporting explicit `segment_start_ms` and `segment_end_ms` keyword arguments.
+- Explicitly passed `segment_start_ms=cand.start_ms` and `segment_end_ms=cand.end_ms` in Stage 7 of `pipeline_controller.py`.
+
+**Reason:**
+- When video candidate segments possess leading visual intros or silence prior to speaker vocalization, naive offset handling produced text prematurely over empty or black screens.
+- Subtracting `segment_start_ms` aligns the first subtitle onset exactly with the speaker's vocalization in the clipped vertical MP4.
+
+**Impact:**
+- Rendered vertical clips display captions strictly in sync with the audio track, completely eliminating premature or out-of-sync captions.
+---
+
+## Step 25 — Native Word Timestamps & Dual-Layer Speech Onset Clamping
+**Decision:**
+- Enabled Faster-Whisper native word timestamps (`word_timestamps=True`) in `src/tools/transcribe_audio.py` (`_transcribe_sync`).
+- Modeled `TranscriptWord` in `src/state/schema.py` and `TranscriptWordModel` in `src/tools/schemas/transcribe_audio.py`, and added `words: list[TranscriptWord]` to `TranscriptSegment` and `TranscriptSegmentModel`, preserving 100% parameter parity across Pydantic models and MCP schemas.
+- In `src/tools/export_subtitles.py`, refactored `_extract_timed_words` to prioritize native word timestamps over uniform chunk division, filter boundary words against `[segment_start_ms, segment_end_ms]`, and shift timestamps relative to `segment_start_ms` with zero-clamping (`max(0, abs_w_start - segment_start_ms)`).
+- Emitted Hormozi-style ASS dialogue lines with active word highlight (`{\c&H0000FFFF&}`) strictly during the word's vocalization window, leaving the screen completely blank (no dialogue events emitted) between `0ms` and the first spoken word's onset.
+- Added a dual-layer Silero VAD speech span fallback guardrail: if native word timestamps are absent, `_extract_timed_words` clamps the earliest subtitle display to the first detected vocal activity span in `speech_spans`.
+- Integrated `speech_spans=self.state.vad_segments` directly into Stage 7 of `src/agents/pipeline_controller.py`.
+
+**Reason:**
+- When video clips begin with introductory silence, background music, or visual titles before speech begins, Whisper's segment-level timestamps defaulted to `start_ms: 0`, causing premature subtitle appearance across empty video.
+- Faster-Whisper's built-in cross-attention alignment produces millisecond-accurate word boundaries without extra inference passes or external models ($0 budget, 100% offline).
+- The VAD fallback provides defense-in-depth when mock transcripts or legacy segments lack word-level timings.
+
+**Impact:**
+- Subtitle display is 100% synchronized with speech utterance: text only appears when the speaker actually vocalizes, and pauses between phrases remain clean and unencumbered by stagnant text.
+---

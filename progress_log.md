@@ -757,3 +757,73 @@
 - `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Verified end-to-end generation of `.mp4`, `.edl`, `.xml`, `.json`, `.srt`, `.ass`, `.jpg`, `_metadata.json`, and `_complete_pack.zip`. Verified ZIP contents and README metadata integrity.
 - Pass
 ---
+## Step 24 — Subtitle Timestamp Offset & Segment Alignment Fix
+**Date:** September 7, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Updated word-level timing extraction in `src/tools/export_subtitles.py` (`_extract_timed_words`):
+  - Computes per-word absolute source timestamps (`abs_w_start`, `abs_w_end`).
+  - Drops words finishing before `segment_start_ms` or starting after `segment_end_ms`.
+  - Shifts word timestamps relative to candidate segment origin: `rel_start = max(0, abs_w_start - segment_start_ms)`.
+  - Clamps negative offsets to 0, ensuring subtitles only render when speech is actively audible in that clip segment and eliminating premature black-screen caption display.
+- Enhanced `export_subtitles` and `export_ass_subtitles` to accept `segment_start_ms` explicitly as a parameter with flexible positional and keyword argument resolution.
+- Updated Stage 7 in `src/agents/pipeline_controller.py` to pass `segment_start_ms=cand.start_ms` and `segment_end_ms=cand.end_ms` explicitly to `export_subtitles` and `export_ass_subtitles`.
+- Added unit test `test_export_subtitles_intro_silence_offset_shifting` in `tests/unit/test_tools.py` verifying that clips with leading intro silence strictly start subtitles at speaker onset and do not emit dialogue events at `00:00:00.00`.
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `src/tools/export_subtitles.py` — Implemented absolute-to-relative offset shifting, boundary word filtering, and `segment_start_ms` parameter handling.
+- `src/agents/pipeline_controller.py` — Explicitly passed `segment_start_ms` and `segment_end_ms` in Stage 7 subtitle export calls.
+- `tests/unit/test_tools.py` — Added unit test `test_export_subtitles_intro_silence_offset_shifting`.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_tools.py -v`: 22 passed in 9.37s.
+- `uv run pytest tests/ -v`: 92 passed in 109.24s (0 failures across all unit, integration, and guardrail test suites).
+- `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Live upload completed with code 0; verified generated SRT and ASS subtitles match shifted segment timestamps with zero black-screen text glitch.
+- Pass
+---
+
+## Step 25 — Native Word Timestamps & Audio-Subtitle Desync Elimination
+**Date:** September 8, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Enabled native word-level timestamps in Faster-Whisper by passing `word_timestamps=True` in `src/tools/transcribe_audio.py` (`_transcribe_sync`).
+- Modeled `TranscriptWord` in `src/state/schema.py` and `TranscriptWordModel` in `src/tools/schemas/transcribe_audio.py` with strict validation (`word`, `start_ms`, `end_ms`, `probability`).
+- Updated `TranscriptSegment` and `TranscriptSegmentModel` to include `words: list[TranscriptWord] = Field(default_factory=list)`, maintaining 100% schema parameter parity.
+- Updated `PipelineController` in `src/agents/pipeline_controller.py` to map transcribed words into `TranscriptSegment` in Stage 2, and passed `speech_spans=self.state.vad_segments` to subtitle export functions in Stage 7.
+- Enhanced subtitle generation engine in `src/tools/export_subtitles.py`:
+  - Prioritizes native Whisper word timestamps (`segment.words`) for pinpoint precision.
+  - Filters words strictly within `[segment_start_ms, segment_end_ms]`.
+  - Shifts word timestamps relative to clip origin: `max(0, abs_w_start - segment_start_ms)`.
+  - Emits Hormozi-style active word highlighting (`{\c&H0000FFFF&}`) strictly during the word's vocalization window.
+  - Leaves the screen blank (no dialogue lines emitted) between 0ms and the first spoken word's onset, eliminating premature caption display across intro music/silence.
+  - Implemented Silero VAD speech span fallback guardrail: if native word timestamps are absent, clamps the earliest subtitle display to the first detected vocal activity span.
+- Added comprehensive unit tests in `tests/unit/test_tools.py` (`test_export_subtitles_native_word_timestamps` and `test_export_subtitles_vad_fallback_guardrail`).
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `src/state/schema.py` — Added `TranscriptWord` model and `words` list to `TranscriptSegment`.
+- `src/tools/schemas/transcribe_audio.py` — Added `TranscriptWordModel` and `words` list to `TranscriptSegmentModel`.
+- `src/tools/transcribe_audio.py` — Passed `word_timestamps=True` to `model.transcribe()` and extracted word objects into output models.
+- `src/agents/pipeline_controller.py` — Mapped `words` into `TranscriptSegment` in Stage 2, and provided `speech_spans` in Stage 7.
+- `src/tools/export_subtitles.py` — Implemented native word-level parsing, blank intro silence handling, and VAD speech onset clamping.
+- `tests/unit/test_tools.py` — Added unit tests for native word timestamps and VAD fallback guardrails.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_tools.py -v`: 24 passed in 8.42s (100% pass rate).
+- `uv run pytest tests/ -v`: 94 passed (0 failures across all unit, integration, and guardrail test suites).
+- `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Completed 8-stage pipeline with code 0; verified generated `.ass` and `.srt` subtitles match exact speech onset with zero premature captions.
+- Pass
+---

@@ -46,6 +46,7 @@ def _extract_timed_words(
     segment_start_ms: int,
     segment_end_ms: int,
     transcript_segments: list[Any],
+    speech_spans: list[Any] | None = None,
 ) -> list[TimedWord]:
     """Extract word-level relative timing from overlapping transcript segments."""
     timed_words: list[TimedWord] = []
@@ -55,27 +56,77 @@ def _extract_timed_words(
         end_ms = getattr(seg, "end_ms", 0)
         text = getattr(seg, "text", "").strip()
 
+        # If speech ends before segment starts or starts after segment ends, skip
         if not text or end_ms <= segment_start_ms or start_ms >= segment_end_ms:
             continue
 
-        rel_start = max(0, start_ms - segment_start_ms)
-        rel_end = min(segment_end_ms - segment_start_ms, end_ms - segment_start_ms)
-        if rel_end <= rel_start:
-            continue
+        raw_words_objs = getattr(seg, "words", None)
+        if raw_words_objs:
+            # 1. Native word timestamps from Faster-Whisper
+            for w in raw_words_objs:
+                w_text = (getattr(w, "word", "") if not isinstance(w, dict) else w.get("word", "")).strip().upper()
+                if not w_text:
+                    continue
+                w_abs_start = getattr(w, "start_ms", 0) if not isinstance(w, dict) else w.get("start_ms", 0)
+                w_abs_end = getattr(w, "end_ms", 0) if not isinstance(w, dict) else w.get("end_ms", 0)
 
-        raw_words = text.split()
-        if not raw_words:
-            continue
+                # Drop words that finish before the candidate segment starts
+                # or start after the candidate segment finishes
+                if w_abs_end <= segment_start_ms or w_abs_start >= segment_end_ms:
+                    continue
 
-        dur = rel_end - rel_start
-        n = len(raw_words)
-        for i, w in enumerate(raw_words):
-            clean_word = w.strip().upper()
-            if not clean_word:
+                rel_start = max(0, w_abs_start - segment_start_ms)
+                rel_end = max(rel_start + 50, min(segment_end_ms - segment_start_ms, w_abs_end - segment_start_ms))
+
+                if rel_end <= rel_start:
+                    continue
+
+                timed_words.append(TimedWord(word=w_text, start_ms=rel_start, end_ms=rel_end))
+        else:
+            # 2. Fallback when word timestamps are absent, with VAD speech onset clamping
+            raw_words = text.split()
+            if not raw_words:
                 continue
-            w_start = rel_start + int(i * dur / n)
-            w_end = rel_start + int((i + 1) * dur / n)
-            timed_words.append(TimedWord(word=clean_word, start_ms=w_start, end_ms=max(w_start + 50, w_end)))
+
+            effective_start_ms = start_ms
+            if speech_spans:
+                overlapping_vad_starts = [
+                    int(round(getattr(span, "start_seconds", 0) * 1000))
+                    for span in speech_spans
+                    if getattr(span, "end_seconds", 0) * 1000 > start_ms
+                    and getattr(span, "start_seconds", 0) * 1000 < end_ms
+                ]
+                if overlapping_vad_starts:
+                    earliest_vad = min(overlapping_vad_starts)
+                    if earliest_vad > effective_start_ms:
+                        effective_start_ms = earliest_vad
+
+            seg_dur = max(1, end_ms - effective_start_ms)
+            n = len(raw_words)
+
+            for i, w in enumerate(raw_words):
+                clean_word = w.strip().upper()
+                if not clean_word:
+                    continue
+
+                # Absolute start and end of this word in source video space
+                abs_w_start = effective_start_ms + int(i * seg_dur / n)
+                abs_w_end = effective_start_ms + int((i + 1) * seg_dur / n)
+
+                # Drop words that finish before the candidate segment starts
+                # or start after the candidate segment finishes
+                if abs_w_end <= segment_start_ms or abs_w_start >= segment_end_ms:
+                    continue
+
+                # Shift word timestamps by subtracting segment_start_ms
+                # Clamp any resulting negative timestamps to 0
+                rel_start = max(0, abs_w_start - segment_start_ms)
+                rel_end = max(rel_start + 50, min(segment_end_ms - segment_start_ms, abs_w_end - segment_start_ms))
+
+                if rel_end <= rel_start:
+                    continue
+
+                timed_words.append(TimedWord(word=clean_word, start_ms=rel_start, end_ms=rel_end))
 
     return timed_words
 
@@ -84,6 +135,7 @@ def generate_srt_content(
     segment_start_ms: int,
     segment_end_ms: int,
     transcript_segments: list[Any],
+    speech_spans: list[Any] | None = None,
 ) -> str:
     """Convert transcript segments overlapping the candidate window into relative SRT content."""
     lines: list[str] = []
@@ -97,8 +149,37 @@ def generate_srt_content(
         if not text or end_ms <= segment_start_ms or start_ms >= segment_end_ms:
             continue
 
-        rel_start = max(0, start_ms - segment_start_ms)
-        rel_end = min(segment_end_ms - segment_start_ms, end_ms - segment_start_ms)
+        words = getattr(seg, "words", None)
+        if words:
+            seg_word_starts = [
+                getattr(w, "start_ms", 0) if not isinstance(w, dict) else w.get("start_ms", 0)
+                for w in words
+            ]
+            seg_word_ends = [
+                getattr(w, "end_ms", 0) if not isinstance(w, dict) else w.get("end_ms", 0)
+                for w in words
+            ]
+            effective_start_ms = min(seg_word_starts) if seg_word_starts else start_ms
+            effective_end_ms = max(seg_word_ends) if seg_word_ends else end_ms
+        else:
+            effective_start_ms = start_ms
+            effective_end_ms = end_ms
+            if speech_spans:
+                overlapping_vad_starts = [
+                    int(round(getattr(span, "start_seconds", 0) * 1000))
+                    for span in speech_spans
+                    if getattr(span, "end_seconds", 0) * 1000 > start_ms
+                    and getattr(span, "start_seconds", 0) * 1000 < end_ms
+                ]
+                if overlapping_vad_starts:
+                    earliest_vad = min(overlapping_vad_starts)
+                    if earliest_vad > effective_start_ms:
+                        effective_start_ms = earliest_vad
+
+        # Shift timestamps by subtracting segment_start_ms
+        # Clamp any resulting negative timestamps to 0
+        rel_start = max(0, effective_start_ms - segment_start_ms)
+        rel_end = min(segment_end_ms - segment_start_ms, effective_end_ms - segment_start_ms)
         if rel_end <= rel_start:
             continue
 
@@ -119,9 +200,15 @@ def generate_ass_content(
     segment_end_ms: int,
     transcript_segments: list[Any],
     words_per_chunk: int = 4,
+    speech_spans: list[Any] | None = None,
 ) -> str:
     """Generate Hormozi-style kinetic ASS subtitles with active-word yellow highlight."""
-    timed_words = _extract_timed_words(segment_start_ms, segment_end_ms, transcript_segments)
+    timed_words = _extract_timed_words(
+        segment_start_ms,
+        segment_end_ms,
+        transcript_segments,
+        speech_spans=speech_spans,
+    )
 
     header = (
         "[Script Info]\n"
@@ -170,16 +257,35 @@ def generate_ass_content(
 
 
 def export_subtitles(
-    segment_start_ms: int,
-    segment_end_ms: int,
-    transcript_segments: list[Any],
-    output_path: str | Path,
+    segment_start_ms: int | list[Any] = 0,
+    segment_end_ms: int | str | Path | None = None,
+    transcript_segments: list[Any] | None = None,
+    output_path: str | Path | None = None,
+    speech_spans: list[Any] | None = None,
+    **kwargs: Any,
 ) -> bool:
-    """Serialize and write SRT subtitles to the specified destination path."""
+    """Serialize and write SRT subtitles shifted by segment_start_ms to destination path."""
     try:
-        p = Path(output_path).resolve()
+        if isinstance(segment_start_ms, list):
+            # Caller passed (transcript_segments, output_path, segment_start_ms=...)
+            act_transcripts = segment_start_ms
+            act_out = segment_end_ms
+            act_start = int(kwargs.get("segment_start_ms", 0))
+            act_end = int(kwargs.get("segment_end_ms", 999999999))
+        else:
+            act_start = int(segment_start_ms)
+            act_end = int(segment_end_ms) if segment_end_ms is not None else int(kwargs.get("segment_end_ms", 999999999))
+            act_transcripts = transcript_segments if transcript_segments is not None else kwargs.get("transcript_segments", [])
+            act_out = output_path if output_path is not None else kwargs.get("output_path")
+
+        spans = speech_spans or kwargs.get("speech_spans")
+
+        if act_out is None:
+            return False
+
+        p = Path(act_out).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
-        content = generate_srt_content(segment_start_ms, segment_end_ms, transcript_segments)
+        content = generate_srt_content(act_start, act_end, act_transcripts, speech_spans=spans)
         p.write_text(content, encoding="utf-8")
         return True
     except Exception:
@@ -187,24 +293,46 @@ def export_subtitles(
 
 
 def export_ass_subtitles(
-    segment_start_ms: int,
-    segment_end_ms: int,
-    transcript_segments: list[Any],
-    output_path: str | Path,
+    segment_start_ms: int | list[Any] = 0,
+    segment_end_ms: int | str | Path | None = None,
+    transcript_segments: list[Any] | None = None,
+    output_path: str | Path | None = None,
     words_per_chunk: int = 4,
+    speech_spans: list[Any] | None = None,
+    **kwargs: Any,
 ) -> bool:
-    """Serialize and write styled ASS subtitles to the specified destination path."""
+    """Serialize and write styled ASS subtitles shifted by segment_start_ms to destination path."""
     try:
-        p = Path(output_path).resolve()
+        if isinstance(segment_start_ms, list):
+            act_transcripts = segment_start_ms
+            act_out = segment_end_ms
+            act_start = int(kwargs.get("segment_start_ms", 0))
+            act_end = int(kwargs.get("segment_end_ms", 999999999))
+            chunk_size = int(kwargs.get("words_per_chunk", words_per_chunk))
+        else:
+            act_start = int(segment_start_ms)
+            act_end = int(segment_end_ms) if segment_end_ms is not None else int(kwargs.get("segment_end_ms", 999999999))
+            act_transcripts = transcript_segments if transcript_segments is not None else kwargs.get("transcript_segments", [])
+            act_out = output_path if output_path is not None else kwargs.get("output_path")
+            chunk_size = words_per_chunk
+
+        spans = speech_spans or kwargs.get("speech_spans")
+
+        if act_out is None:
+            return False
+
+        p = Path(act_out).resolve()
         p.parent.mkdir(parents=True, exist_ok=True)
         content = generate_ass_content(
-            segment_start_ms,
-            segment_end_ms,
-            transcript_segments,
-            words_per_chunk=words_per_chunk,
+            act_start,
+            act_end,
+            act_transcripts,
+            words_per_chunk=chunk_size,
+            speech_spans=spans,
         )
         p.write_text(content, encoding="utf-8")
         return True
     except Exception:
         return False
+
 

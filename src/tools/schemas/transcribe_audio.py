@@ -7,6 +7,17 @@ from typing import Any, Literal
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
 
+class TranscriptWordModel(BaseModel):
+    """Word-level timing model."""
+
+    model_config = ConfigDict(strict=True)
+
+    word: str = Field(..., description="Individual word token.")
+    start_ms: int = Field(..., ge=0, description="Word start offset in milliseconds.")
+    end_ms: int = Field(..., ge=0, description="Word end offset in milliseconds.")
+    probability: float | None = Field(default=None, description="Confidence probability of word.")
+
+
 class TranscriptSegmentModel(BaseModel):
     """Timestamped transcript segment model."""
 
@@ -15,6 +26,8 @@ class TranscriptSegmentModel(BaseModel):
     start_ms: int = Field(..., ge=0, description="Segment start offset in milliseconds.")
     end_ms: int = Field(..., ge=0, description="Segment end offset in milliseconds.")
     text: str = Field(..., description="Transcribed text for this segment.")
+    words: list[TranscriptWordModel] = Field(default_factory=list, description="Word-level timestamps.")
+
 
 
 class TranscribeAudioInput(BaseModel):
