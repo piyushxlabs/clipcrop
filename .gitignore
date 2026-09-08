@@ -1,8 +1,3 @@
-docs/
-.docs/
-/.agents/
-/agents/
-
 # Environment and secrets
 .env
 .env.*
@@ -28,6 +23,22 @@ node_modules/
 dist/
 .pnpm-store/
 
+# Internal specification & tracking files
+docs/
+.docs/
+/.agents/
+/agents/
+
+# AXIOM Protocol / Tracking & Presentation Files
+AUDIT_REPORT.md
+progress_log.md
+project_state.md
+TECHNICAL_NOTES.md
+do_after_completion.md
+README_1.md
+presentations/
+*slides.html
+
 # Demo assets and scratch files
 demo video assets/
 demo assets/
@@ -45,23 +56,8 @@ Thumbs.db
 # Log files
 *.log
 
-# AXIOM Protocol / Tracking Files
-progress_log.md
-project_state.md
-TECHNICAL_NOTES.md
-do_after_completion.md
-
-
-
-README_1.md
-clipcrop_slides.html
-
 # Heavy media recordings & audio
 assets/*.mp4
 assets/*.mp3
 *.mp4
 *.mp3
-
-# Temporary & presentation files
-README_1.md
-*slides.html
