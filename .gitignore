@@ -50,3 +50,18 @@ progress_log.md
 project_state.md
 TECHNICAL_NOTES.md
 do_after_completion.md
+
+
+
+README_1.md
+clipcrop_slides.html
+
+# Heavy media recordings & audio
+assets/*.mp4
+assets/*.mp3
+*.mp4
+*.mp3
+
+# Temporary & presentation files
+README_1.md
+*slides.html
