@@ -24,6 +24,7 @@ dist/
 .pnpm-store/
 
 # Internal specification & tracking files
+CLAUDE.md
 docs/
 .docs/
 /.agents/
