@@ -64,6 +64,40 @@ Subtitles are generated with native word-level timestamps (`word_timestamps=True
 
 ---
 
+## 🖥️ Visual Grounding & Live Engine Showcase
+
+<div align="center">
+  <h4>1. Autonomous 8-Stage Forward-Only Perception Pipeline</h4>
+  <img src="./assets/dashboard_pipeline_run.png" alt="ClipCrop Dashboard Live Execution" width="100%" style="border-radius: 8px; margin-bottom: 8px;" />
+  <p><em>Real-time execution across Faster-Whisper, Silero VAD, and MediaPipe BlazeFace with 0 KB network egress.</em></p>
+</div>
+
+---
+
+<div align="center">
+  <h4>2. Hormozi-Style Kinetic Captions & Active Word Highlighting</h4>
+  <img src="./assets/vertical_kinetic_captions.png" alt="ClipCrop Vertical Video Output with Kinetic Subtitles" width="100%" style="border-radius: 8px; margin-bottom: 8px;" />
+  <p><em>Sub-millisecond speech-onset alignment clamping with vibrant yellow active word focus and local Qwen 2.5 viral hook synthesis.</em></p>
+</div>
+
+---
+
+<div align="center">
+  <h4>3. 1-Click Complete Creator Bundle & Non-Destructive NLE Assets</h4>
+  <img src="./assets/creator_bundle_pack.png" alt="ClipCrop Complete Creator Pack Folder" width="100%" style="border-radius: 8px; margin-bottom: 8px;" />
+  <p><em>All-in-one ZIP bundle containing 1080x1920 MP4, CMX 3600 EDL, Apple XML, SRT captions, cover thumbnail, and metadata.</em></p>
+</div>
+
+---
+
+<div align="center">
+  <h4>4. Deterministic Reliability: 95 / 95 Unit & Integration Tests Passing</h4>
+  <img src="./assets/terminal_test_suite.png" alt="ClipCrop Pytest 95 Passed Suite" width="100%" style="border-radius: 8px; margin-bottom: 8px;" />
+  <p><em>100% test coverage enforcing air-gap socket blockers, source immutability, and 10-candidate loop circuit breakers.</em></p>
+</div>
+
+---
+
 ## 🏗️ Core Architecture — Deterministic 8-Stage Pipeline
 
 ```mermaid
@@ -71,71 +105,68 @@ flowchart TD
     MP4(["📹 Source Video File\n(16:9 MP4 / MOV / MKV)"]) --> S1
 
     subgraph S1_BOX ["Stage 1 — Ingest & Validate"]
-        S1["🔍 decode_and_validate_source\n───────────────────────────────\nffprobe stream analysis\nPath traversal defense\nFPS, resolution, duration probe"]
+        S1["🔍 decode_and_validate_source\nffprobe stream analysis · Traversal defense · Metadata probe"]
     end
 
     S1 --> S2_FORK{"Parallel Async Dispatch\n(asyncio.gather)"}
 
     subgraph S2_BOX ["Stage 2 — Transcribe & Acoustic Segmentation"]
-        S2_FORK --> S2A["🎙️ transcribe_audio\nFaster-Whisper (base.en INT8)\nWord-level timestamps"]
-        S2_FORK --> S2B["🔊 detect_speech_pauses\nSilero VAD (TorchScript JIT)\nAcoustic speech spans"]
+        S2A["🎙️ transcribe_audio\nFaster-Whisper (base.en INT8)\nWord-level native timestamps"]
+        S2B["🔊 detect_speech_pauses\nSilero VAD (TorchScript JIT)\nAcoustic speech spans"]
+    end
+
+    S2_FORK --> S2A
+    S2_FORK --> S2B
+
+    subgraph S3_BOX ["Stage 3 — Heuristic Candidate Scoring"]
+        S3["📊 score_candidate_segments\nPause boundary · RMS energy peaks · Speaking rate · Keyword density\nDeterministic Top-K Ranking (Max 10)"]
     end
 
     S2A & S2B --> S3
-
-    subgraph S3_BOX ["Stage 3 — Heuristic Candidate Scoring"]
-        S3["📊 score_candidate_segments\n───────────────────────────────\nPause boundary scoring\nAudio energy RMS peaks\nSpeaking rate variance\nKeyword & question density\nDeterministic Top-K Ranking (Max 10)"]
-    end
-
     S3 --> S4
 
     subgraph S4_BOX ["Stage 4 — Parallel Multi-Core Speaker Tracking"]
-        S4["👤 track_speaker_position\n───────────────────────────────\nProcessPoolExecutor Multi-Core Fan-Out\nMediaPipe BlazeFace Task\n2D Bounding-Box Detection (No Biometrics)\nTarget Frame Rate: 10 FPS"]
+        S4["👤 track_speaker_position\nProcessPoolExecutor Multi-Core Fan-Out\nMediaPipe BlazeFace Task (2D Bounding Box · 0 Biometrics)"]
     end
 
     S4 --> S5
 
     subgraph S5_BOX ["Stage 5 — Deterministic Confidence Gate"]
         S5{"confidence_gate_decision\ntracking_confidence >= 0.65?"}
-        S5 -->|"No (< 0.65)"| SKIP["🚫 skipped_segments\nAudit Log with reason\nShort-circuit rendering"]
-        S5 -->|"Yes (>= 0.65)"| S6
+        SKIP["🚫 skipped_segments\nAudit Log with reason · Short-circuit render"]
     end
+
+    S5 -->|"No (< 0.65)"| SKIP
 
     subgraph S6_BOX ["Stage 6 — Crop Path Smoothing"]
-        S6["📐 smooth_crop_path\n───────────────────────────────\nExponential Moving Average (EMA)\nAlpha = 0.15 smoothing factor\nEliminates camera jitter & overshoot\nMaintains 9:16 aspect ratio box"]
+        S6["📐 smooth_crop_path\nExponential Moving Average (EMA · α=0.15)\nEliminates camera jitter · Enforces 9:16 aspect ratio"]
     end
 
+    S5 -->|"Yes (>= 0.65)"| S6
     S6 --> S7
 
     subgraph S7_BOX ["Stage 7 — Render, Captions & NLE Export"]
-        S7["⚙️ render_vertical_clip\nFFmpeg 9.0.1 crop & scale (1080x1920)\nASS Subtitles: Yellow Active Word Highlight\n\n+ export_crop_path_data\nCMX 3600 EDL (HH:MM:SS:FF) + Apple XML\n\n+ extract_thumbnail & generate_clip_metadata\nLocal Ollama Qwen 2.5 Hook & Viral Titles"]
+        S7["⚙️ render_vertical_clip + export_crop_path_data\nFFmpeg 9.0.1 (1080x1920) · Kinetic Yellow Captions\nCMX 3600 EDL (HH:MM:SS:FF) + Apple XML + Peak Thumbnail\nLocal Ollama Qwen 2.5 Viral Hooks & Titles"]
     end
 
     S7 --> S8
 
     subgraph S8_BOX ["Stage 8 — Packaging & Terminal Delivery"]
-        S8["📦 bundle_deliverables\nMaster ZIP Creator Pack\nRendered MP4 + EDL + XML + SRT + Metadata\n\n🎯 aggregate_and_terminate\nOpenTelemetry local JSON span flush"]
+        S8["📦 bundle_deliverables\nMaster ZIP Creator Pack (_complete_pack.zip)\nOpenTelemetry Local JSON Span Flush"]
     end
 
-    S8 --> DELIV(["✨ Final Deliverables Grid & ZIP Download\noutputs/{session_id}_seg_01_complete_pack.zip"])
+    S8 --> DELIV(["✨ Final Deliverables Grid & Creator Pack ZIP\noutputs/{session_id}_seg_01_complete_pack.zip"])
 
-    %% State Reducer Subgraph
-    subgraph STATE ["🗂️ In-Process State Machine (src/state/schema.py)"]
-        direction LR
-        R1["immutable_after_init\n(session_id, source_video, config)"]
-        R2["append_only\n(transcripts, vad, clips, exports, logs)"]
-        R3["merge_by_key\n(tracking, gate, crop_paths)"]
-        R4["last_write_wins\n(candidate_segments <= 10)"]
+    %% Dedicated Parallel State Architecture Block
+    subgraph STATE ["🗂️ In-Process State Reducers (src/state/schema.py)"]
+        direction TB
+        R1["immutable_after_init (session_id, source_video, config)"]
+        R2["append_only (transcripts, vad, clips, exports, logs)"]
+        R3["merge_by_key (tracking, gate, crop_paths)"]
+        R4["last_write_wins (candidate_segments <= 10)"]
     end
 
-    S1 -.-> STATE
-    S2A & S2B -.-> STATE
-    S3 -.-> STATE
-    S4 -.-> STATE
-    S5 -.-> STATE
-    S6 -.-> STATE
-    S7 -.-> STATE
-    S8 -.-> STATE
+    DELIV -.- STATE
 
     style MP4 fill:#1e1b4b,stroke:#818cf8,stroke-width:2px,color:#e0e7ff
     style S1_BOX fill:#0f172a,stroke:#38bdf8,stroke-width:1.5px,color:#e2e8f0
@@ -439,7 +470,11 @@ clipcrop/
 ├── assets/                                  # Documentation assets, demo video & logos
 │   ├── banner.png                           # Hero banner
 │   ├── demo_thumbnail.png                   # YouTube walkthrough thumbnail
-│   └── logo.png                             # Brand icon
+│   ├── logo.png                             # Brand icon
+│   ├── dashboard_pipeline_run.png           # Live dashboard execution showcase
+│   ├── vertical_kinetic_captions.png        # 9:16 vertical video & kinetic captions
+│   ├── creator_bundle_pack.png              # Complete creator pack folder & ZIP
+│   └── terminal_test_suite.png              # 95 / 95 automated test suite verification
 │
 ├── docs/                                    # 5 Foundational Specification Documents
 │   ├── AGENT_BEHAVIOR_PROFILE.md            # Behavioral invariants & BIPA privacy rules
