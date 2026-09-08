@@ -1,7 +1,7 @@
 """100% Local Viral Title, Hook & SEO Engine.
 
-Heuristic extraction of viral social media hooks, 3 title variants,
-and categorical hashtags from clip transcripts. Zero cloud API calls.
+Heuristic & Local LLM (Ollama Qwen 2.5) extraction of viral social media hooks,
+3 title variants, and categorical hashtags from clip transcripts. Zero cloud API calls.
 """
 
 from __future__ import annotations
@@ -10,6 +10,7 @@ import json
 from pathlib import Path
 import re
 from typing import Any
+import urllib.request
 
 
 def _extract_key_topic(text: str) -> str:
@@ -34,12 +35,93 @@ def _extract_key_topic(text: str) -> str:
     return "This"
 
 
+def _query_ollama_metadata(
+    transcript: str,
+    timeout: float = 4.0,
+    endpoint: str = "http://127.0.0.1:11434",
+) -> dict[str, Any] | None:
+    """Query local Ollama instance running Qwen 2.5 for viral metadata.
+
+    Falls back gracefully if Ollama is unreachable, times out, or returns invalid JSON.
+    """
+    if not transcript or not transcript.strip():
+        return None
+
+    # Priority model: qwen2.5:3b, then qwen2.5:7b
+    models_to_try = ["qwen2.5:3b", "qwen2.5:7b"]
+
+    prompt = (
+        "You are an expert short-form viral video editor. Analyze this clip transcript:\n"
+        f'"{transcript.strip()}"\n\n'
+        "Generate a JSON object with:\n"
+        '1. "hook": One punchy, curiosity-inducing opening hook sentence (max 10 words, do NOT use generic greetings like "Hey everyone").\n'
+        '2. "titles": Array of 3 high-CTR viral titles.\n'
+        '3. "hashtags": Array of 5 relevant viral hashtags starting with #.\n\n'
+        "Respond strictly with valid JSON only."
+    )
+
+    for model_name in models_to_try:
+        try:
+            req_data = {
+                "model": model_name,
+                "messages": [{"role": "user", "content": prompt}],
+                "stream": False,
+                "format": "json",
+                "keep_alive": -1,
+            }
+            req = urllib.request.Request(
+                f"{endpoint}/api/chat",
+                data=json.dumps(req_data).encode("utf-8"),
+                headers={"Content-Type": "application/json"},
+                method="POST",
+            )
+            with urllib.request.urlopen(req, timeout=timeout) as res:
+                if res.status != 200:
+                    continue
+                body = json.loads(res.read().decode("utf-8"))
+                content = body.get("message", {}).get("content", "").strip()
+                if not content:
+                    continue
+                # Strip optional markdown code fences
+                if content.startswith("```"):
+                    content = re.sub(r"^```(?:json)?\s*", "", content, flags=re.IGNORECASE)
+                    content = re.sub(r"\s*```$", "", content)
+                parsed = json.loads(content)
+                if not isinstance(parsed, dict):
+                    continue
+
+                hook = str(parsed.get("hook", "")).strip()
+                raw_titles = parsed.get("titles", [])
+                raw_hashtags = parsed.get("hashtags", [])
+
+                if not hook or not isinstance(raw_titles, list) or not raw_titles:
+                    continue
+
+                titles = [str(t).strip() for t in raw_titles if str(t).strip()][:3]
+                hashtags = [
+                    f"#{str(h).strip().lstrip('#')}"
+                    for h in raw_hashtags
+                    if str(h).strip()
+                ][:5]
+
+                return {
+                    "hook": hook,
+                    "titles": titles if titles else None,
+                    "hashtags": hashtags if hashtags else None,
+                }
+        except Exception:
+            continue
+
+    return None
+
+
 def generate_clip_metadata(
     segment_id: str,
     transcript_text: str,
     duration_seconds: float,
     energy_score: float = 0.8,
     output_path: str | Path | None = None,
+    use_ollama: bool = True,
 ) -> dict[str, Any]:
     """Generate viral hooks, titles, and hashtags from segment transcript."""
     cleaned_text = transcript_text.strip()
@@ -52,7 +134,7 @@ def generate_clip_metadata(
     if not sentences:
         sentences = [cleaned_text or "Check this out"]
 
-    # 1. Hook Extraction: Look for question or punchy opening clause
+    # 1. Heuristic Hook Extraction
     hook = sentences[0]
     for s in sentences[:3]:
         s_lower = s.lower()
@@ -63,7 +145,6 @@ def generate_clip_metadata(
             hook = s
             break
 
-    # Clean hook of trailing punct
     hook_clean = hook.strip(" .,-")
 
     # 2. Key Subject
@@ -94,6 +175,20 @@ def generate_clip_metadata(
         base_hashtags[3] = "#Fitness"
         base_hashtags[4] = "#Health"
 
+    # 5. Intelligent Local Ollama (Qwen 2.5) Enhancement with Safe Fallback
+    if use_ollama:
+        try:
+            ollama_data = _query_ollama_metadata(cleaned_text, timeout=4.0)
+            if ollama_data:
+                if ollama_data.get("hook"):
+                    hook_clean = ollama_data["hook"]
+                if ollama_data.get("titles"):
+                    titles = ollama_data["titles"]
+                if ollama_data.get("hashtags"):
+                    base_hashtags = ollama_data["hashtags"]
+        except Exception:
+            pass
+
     payload: dict[str, Any] = {
         "segment_id": segment_id,
         "duration_seconds": round(duration_seconds, 2),
@@ -113,3 +208,4 @@ def generate_clip_metadata(
             pass
 
     return payload
+

@@ -825,5 +825,36 @@
 - `uv run pytest tests/unit/test_tools.py -v`: 24 passed in 8.42s (100% pass rate).
 - `uv run pytest tests/ -v`: 94 passed (0 failures across all unit, integration, and guardrail test suites).
 - `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Completed 8-stage pipeline with code 0; verified generated `.ass` and `.srt` subtitles match exact speech onset with zero premature captions.
+---
+
+## Step 26 — Local Ollama (Qwen 2.5) Intelligent Viral Hooks & Metadata
+**Date:** September 8, 2026
+**Status:** Complete
+
+**What was implemented:**
+- Integrated local Ollama API (`http://127.0.0.1:11434/api/chat`) with Qwen 2.5 ("qwen2.5:3b" / "qwen2.5:7b") loaded from `A:\ollama_models` in `src/tools/generate_clip_metadata.py`.
+- Built strict JSON formatting prompt instructing the local LLM to generate:
+  1. A punchy, curiosity-inducing opening hook sentence (max 10 words, free of generic greetings).
+  2. 3 high-CTR viral titles.
+  3. 5 viral hashtags starting with `#`.
+- Enforced a 4.0-second timeout with `keep_alive: -1` in the request payload, keeping model weights resident on the GPU for sub-2-second inference.
+- Implemented defensive heuristic fallback (strict invariant): wrapped the Ollama call in a comprehensive `try...except Exception:` block so timeouts, connection refusals, or malformed JSON silently fall back to the deterministic offline keyword heuristic without interrupting the pipeline.
+- Added `use_ollama` parameter and created unit test `test_generate_clip_metadata_ollama_mock` in `tests/unit/test_tools.py` verifying both successful Ollama JSON extraction and silent fallback on timeout/connection error.
+- Verified live end-to-end upload generating high-IQ viral hooks and titles.
+
+**Files Created:**
+- None
+
+**Files Modified:**
+- `src/tools/generate_clip_metadata.py` — Added local Ollama Qwen 2.5 integration, JSON parsing, and defensive heuristic fallback.
+- `tests/unit/test_tools.py` — Added unit test verifying Ollama JSON response handling and fallback guardrail.
+
+**Packages Installed:**
+- None
+
+**Verification Result:**
+- `uv run pytest tests/unit/test_tools.py -v`: 25 passed in 11.23s.
+- `uv run pytest tests/ -v`: 95 passed in 157.67s (0 failures across all unit, integration, and guardrail test suites).
+- `uv run python scripts/test_live_upload.py tests/fixtures/simple_case.mp4`: Completed 8-stage pipeline with code 0; verified intelligent viral hook ("Unlock the art of video editing today!"), 3 high-CTR titles, and 5 hashtags populated in `_metadata.json` and master ZIP.
 - Pass
 ---

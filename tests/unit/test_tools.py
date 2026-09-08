@@ -670,7 +670,7 @@ def test_export_subtitles_vad_fallback_guardrail(tmp_path: Path) -> None:
 
 
 def test_generate_clip_metadata(tmp_path: Path) -> None:
-    """Assert viral metadata engine generates opening hook, 3 titles, and 5 hashtags."""
+    """Assert viral metadata engine generates opening hook, 3 titles, and 5 hashtags via heuristic."""
     from src.tools.generate_clip_metadata import generate_clip_metadata
 
     out_json = tmp_path / "meta.json"
@@ -681,6 +681,7 @@ def test_generate_clip_metadata(tmp_path: Path) -> None:
         duration_seconds=59.0,
         energy_score=0.95,
         output_path=out_json,
+        use_ollama=False,
     )
 
     assert meta["segment_id"] == "seg_01"
@@ -689,6 +690,55 @@ def test_generate_clip_metadata(tmp_path: Path) -> None:
     assert len(meta["hashtags"]) == 5
     assert any(tag in ["#Technology", "#AI", "#Productivity"] for tag in meta["hashtags"])
     assert out_json.exists()
+
+
+def test_generate_clip_metadata_ollama_mock(tmp_path: Path) -> None:
+    """Assert Ollama JSON response is parsed into metadata and fallback is safe on error."""
+    import io
+    from unittest.mock import MagicMock, patch
+    from src.tools.generate_clip_metadata import generate_clip_metadata
+
+    # 1. Successful Ollama JSON parsing test
+    mock_ollama_response = {
+        "message": {
+            "content": json.dumps({
+                "hook": "Stop wasting hours debugging code right now.",
+                "titles": ["The 10x Developer Secret", "Why Your Code Fails", "Code Faster in 60s"],
+                "hashtags": ["#Coding", "#Python", "#SoftwareEngineering", "#DevTips", "#Tech"],
+            })
+        }
+    }
+    mock_res = MagicMock()
+    mock_res.status = 200
+    mock_res.read.return_value = json.dumps(mock_ollama_response).encode("utf-8")
+    mock_res.__enter__.return_value = mock_res
+    mock_res.__exit__.return_value = None
+
+    with patch("urllib.request.urlopen", return_value=mock_res):
+        meta = generate_clip_metadata(
+            segment_id="seg_ollama",
+            transcript_text="Here is a transcript about debugging code.",
+            duration_seconds=30.0,
+            use_ollama=True,
+        )
+        assert meta["hook"] == "Stop wasting hours debugging code right now."
+        assert meta["titles"] == ["The 10x Developer Secret", "Why Your Code Fails", "Code Faster in 60s"]
+        assert "#Coding" in meta["hashtags"]
+
+    # 2. Defensive Fallback on Connection Timeout / Error
+    with patch("urllib.request.urlopen", side_effect=TimeoutError("Ollama timed out")):
+        fallback_meta = generate_clip_metadata(
+            segment_id="seg_fallback",
+            transcript_text="Give me 59 seconds to explain artificial intelligence.",
+            duration_seconds=59.0,
+            use_ollama=True,
+        )
+        # Must not raise an exception and must safely fall back to heuristic
+        assert fallback_meta["segment_id"] == "seg_fallback"
+        assert "Give me 59 seconds" in fallback_meta["hook"]
+        assert len(fallback_meta["titles"]) == 3
+        assert len(fallback_meta["hashtags"]) == 5
+
 
 
 def test_create_deliverables_bundle(tmp_path: Path) -> None:

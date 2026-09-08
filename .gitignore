@@ -26,8 +26,24 @@ venv/
 # Node / Frontend
 node_modules/
 dist/
-.pnpm-store/    
+.pnpm-store/
 
+# Demo assets and scratch files
+demo video assets/
+demo assets/
+scratch/
+scratch*.py
+
+# IDE & OS files
+.vscode/
+.idea/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# Log files
+*.log
 
 # AXIOM Protocol / Tracking Files
 progress_log.md

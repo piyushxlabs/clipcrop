@@ -1,6 +1,6 @@
 # ClipCrop Project State
 
-- **Last Completed Step:** Step 25: Native Word Timestamps & Audio-Subtitle Desync Elimination
+- **Last Completed Step:** Step 26: Local Ollama (Qwen 2.5) Intelligent Viral Hooks & Metadata
 - **Implemented Features:**
   - Sandboxed filesystem architecture (`uploads/`, `outputs/`, `outputs/traces/`, `models/`)
   - Environment variable schema and active `.env` configuration file
@@ -122,10 +122,13 @@
   - Native Faster-Whisper word timestamps extraction (`word_timestamps=True`) with strict Pydantic V2 modeling (`TranscriptWord`, `TranscriptWordModel`) in state and schemas
   - Word-level precise subtitle generation with kinetic active word highlighting (`{\c&H0000FFFF&}`), zero premature captions during intro silence/music, and blank screen handling
   - Silero VAD speech span fallback guardrail clamping subtitle display when word timestamps are absent
-  - 100% test pass rate across all 94 pytest unit, integration, and guardrail tests
-- **Last Completed Step:** Step 25: Native Word Timestamps & Audio-Subtitle Desync Elimination
+  - Intelligent local Ollama (Qwen 2.5:3b / 7b) metadata engine generating high-CTR curiosity hooks, 3 viral titles, and 5 hashtags with strict 4.0s timeout and keep_alive GPU residency
+  - Safe defensive heuristic fallback ensuring zero pipeline or test disruption when Ollama is unavailable
+  - 100% test pass rate across all 95 pytest unit, integration, and guardrail tests
+- **Last Completed Step:** Step 26: Local Ollama (Qwen 2.5) Intelligent Viral Hooks & Metadata
 - **Pending Next Step:** None (All features and enhancements complete — Engine Fully Operational)
 - **Known Issues / Blockers:** None
+
 
 
 
